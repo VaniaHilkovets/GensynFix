@@ -3,67 +3,99 @@
 set -e  # вылетать при ошибке
 ROOT=$PWD
 
-export HF_HUB_DOWNLOAD_TIMEOUT=120
-DEFAULT_IDENTITY_PATH="$ROOT/swarm.pem"
-IDENTITY_PATH=${IDENTITY_PATH:-$DEFAULT_IDENTITY_PATH}
+export PUB_MULTI_ADDRS
+export PEER_MULTI_ADDRS
+export HOST_MULTI_ADDRS
+export IDENTITY_PATH
+export CONNECT_TO_TESTNET
+export ORG_ID
+export HF_HUB_DOWNLOAD_TIMEOUT=120  # 2 minutes
 
+# Defaults
+DEFAULT_PUB_MULTI_ADDRS=""
 DEFAULT_PEER_MULTI_ADDRS="/ip4/38.101.215.13/tcp/30002/p2p/QmQ2gEXoPJg6iMBSUFWGzAabS2VhnzuS782Y637hGjfsRJ"
 DEFAULT_HOST_MULTI_ADDRS="/ip4/0.0.0.0/tcp/38331"
+DEFAULT_IDENTITY_PATH="$ROOT/swarm.pem"
 
+# Fallbacks
+PUB_MULTI_ADDRS=${PUB_MULTI_ADDRS:-$DEFAULT_PUB_MULTI_ADDRS}
 PEER_MULTI_ADDRS=${PEER_MULTI_ADDRS:-$DEFAULT_PEER_MULTI_ADDRS}
 HOST_MULTI_ADDRS=${HOST_MULTI_ADDRS:-$DEFAULT_HOST_MULTI_ADDRS}
+IDENTITY_PATH=${IDENTITY_PATH:-$DEFAULT_IDENTITY_PATH}
 
-# Устанавливаем python и pip, если нет
-echo -e "\n\e[1;33m[0/4] Проверка Python и pip...\e[0m"
-sudo apt update
-sudo apt install -y python3 python3-pip
-sudo ln -s $(which python3) /usr/bin/python || true
+# Prompt
+while true; do
+    read -p "Would you like to connect to the Testnet? [Y/n] " yn
+    yn=${yn:-Y}
+    case $yn in
+        [Yy]*) CONNECT_TO_TESTNET=True; break;;
+        [Nn]*) CONNECT_TO_TESTNET=False; break;;
+        *) echo ">>> Please answer yes or no.";;
+    esac
+done
 
-# Спрашиваем про подключение к Testnet
-read -p $'\e[1;36mПодключиться к Testnet? [Y/n]: \e[0m' yn
-yn=${yn:-Y}
-if [[ $yn =~ ^[Yy]$ ]]; then
-    CONNECT_TO_TESTNET=True
-else
-    CONNECT_TO_TESTNET=False
+# Install deps
+sudo apt update && sudo apt install -y curl git python3-pip lsof
+
+# Cloudflared
+if ! command -v cloudflared >/dev/null 2>&1; then
+    echo "Installing Cloudflared..."
+    wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+    sudo dpkg -i cloudflared-linux-amd64.deb
+    rm cloudflared-linux-amd64.deb
 fi
 
-if [[ "$CONNECT_TO_TESTNET" == "True" ]]; then
-    echo -e "\n\e[1;33m[1/4] Устанавливаем Node.js 20 и npm (если не установлены)...\e[0m"
-    if ! command -v node >/dev/null 2>&1; then
-        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-        sudo apt-get install -y nodejs
-    fi
+# Node.js + npm
+if ! command -v node >/dev/null 2>&1; then
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    sudo apt install -y nodejs
+fi
 
-    echo -e "\n\e[1;33m[2/4] Устанавливаем зависимости...\e[0m"
-    cd "$ROOT/modal-login"
+if [ "$CONNECT_TO_TESTNET" = "True" ]; then
+    echo "Please login to create an Ethereum Server Wallet"
+    cd modal-login
 
     rm -rf node_modules package-lock.json yarn.lock
-
     npm install --legacy-peer-deps
 
-    echo -e "\n\e[1;33m[3/4] Патчим проблему с sonic...\e[0m"
-    sed -i '/import.*sonic/d' node_modules/@account-kit/react/node_modules/@account-kit/infra/dist/esm/chains.js || true
+    # Fix sonic
+    if [ -f node_modules/@account-kit/infra/dist/esm/chains.js ]; then
+        sed -i '/import.*sonic/d' node_modules/@account-kit/infra/dist/esm/chains.js || true
+    fi
 
-    echo -e "\n\e[1;33m[4/4] Запускаем dev сервер...\e[0m"
     npm run dev > "$ROOT/server.log" 2>&1 &
     SERVER_PID=$!
     cd "$ROOT"
 
-    echo -e "\n\e[1;36mОткрой новое окно и выполни:\e[0m"
-    echo -e "\e[1;32mcloudflared tunnel --url http://localhost:3000\e[0m"
+    echo -e "\nOpen new window and run:"
+    echo "cloudflared tunnel --url http://localhost:3000"
 
-    echo -e "\nОжидаем появления userData.json..."
-    while [ ! -f "modal-login/temp-data/userData.json" ]; do
+    echo "Waiting for userData.json..."
+    while [ ! -f modal-login/temp-data/userData.json ]; do
         sleep 3
         echo "Waiting..."
     done
 
-    echo -e "\n\e[1;32m✓ userData.json найден\e[0m"
+    echo "✓ userData.json found"
     ORG_ID=$(awk 'BEGIN { FS = "\"" } !/^[ \t]*[{}]/ { print $(NF - 1); exit }' modal-login/temp-data/userData.json)
+
+    # API activation
+    echo "Waiting for API key activation..."
+    while true; do
+        STATUS=$(curl -s "http://localhost:3000/api/get-api-key-status?orgId=$ORG_ID")
+        if [[ "$STATUS" == "activated" ]]; then
+            echo "✓ API key is activated"
+            break
+        else
+            echo "Waiting for activation..."
+            sleep 5
+        fi
+    done
+
+    trap 'kill $SERVER_PID; rm -f modal-login/temp-data/*.json' INT
 fi
 
-# Ставим питон зависимости
+# Install Python deps
 pip install -r "$ROOT/requirements-hivemind.txt" > /dev/null
 pip install -r "$ROOT/requirements.txt" > /dev/null
 
@@ -74,7 +106,7 @@ else
     CONFIG_PATH="$ROOT/hivemind_exp/configs/mac/grpo-qwen-2.5-0.5b-deepseek-r1.yaml"
 fi
 
-# Хаб токен
+# HuggingFace
 if [ -n "$HF_TOKEN" ]; then
     HUGGINGFACE_ACCESS_TOKEN=$HF_TOKEN
 else
@@ -87,16 +119,16 @@ else
     fi
 fi
 
-# Запуск
-echo -e "\n\e[1;35mЗапуск ноды...\e[0m"
+# Start
+echo -e "\n\e[1;35mLaunching node...\e[0m"
 if [ -n "$ORG_ID" ]; then
-    python -m hivemind_exp.gsm8k.train_single_gpu \
+    python3 -m hivemind_exp.gsm8k.train_single_gpu \
         --hf_token "$HUGGINGFACE_ACCESS_TOKEN" \
         --identity_path "$IDENTITY_PATH" \
         --modal_org_id "$ORG_ID" \
         --config "$CONFIG_PATH"
 else
-    python -m hivemind_exp.gsm8k.train_single_gpu \
+    python3 -m hivemind_exp.gsm8k.train_single_gpu \
         --hf_token "$HUGGINGFACE_ACCESS_TOKEN" \
         --identity_path "$IDENTITY_PATH" \
         --public_maddr "$PUB_MULTI_ADDRS" \
@@ -104,3 +136,5 @@ else
         --host_maddr "$HOST_MULTI_ADDRS" \
         --config "$CONFIG_PATH"
 fi
+
+wait
