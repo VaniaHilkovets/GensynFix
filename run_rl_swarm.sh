@@ -16,7 +16,7 @@ DEFAULT_PUB_MULTI_ADDRS=""
 PUB_MULTI_ADDRS=${PUB_MULTI_ADDRS:-$DEFAULT_PUB_MULTI_ADDRS}
 
 #Check if peer multi-address is given else set to default
-DEFAULT_PEER_MULTI_ADDRS="/ip4/38.101.215.13/tcp/30002/p2p/QmQ2gEXoPJg6iMBSUFWGzAabS2VhnzuS782Y637hGjfsRJ" # gensyn coordinator node
+DEFAULT_PEER_MULTI_ADDRS="/ip4/38.101.215.13/tcp/30002/p2p/QmQ2gEXoPJg6iMBSUFWGzAabS2VhnzuS782Y637hGjfsRJ"
 PEER_MULTI_ADDRS=${PEER_MULTI_ADDRS:-$DEFAULT_PEER_MULTI_ADDRS}
 
 #Check if host multi-address is given else set to default
@@ -24,13 +24,12 @@ DEFAULT_HOST_MULTI_ADDRS="/ip4/0.0.0.0/tcp/38331"
 HOST_MULTI_ADDRS=${HOST_MULTI_ADDRS:-$DEFAULT_HOST_MULTI_ADDRS}
 
 # Path to an RSA private key. If this path does not exist, a new key pair will be created.
-# Remove this file if you want a new PeerID.
 DEFAULT_IDENTITY_PATH="$ROOT"/swarm.pem
 IDENTITY_PATH=${IDENTITY_PATH:-$DEFAULT_IDENTITY_PATH}
 
 while true; do
     read -p "Would you like to connect to the Testnet? [Y/n] " yn
-    yn=${yn:-Y}  # Default to "Y" if the user presses Enter
+    yn=${yn:-Y}
     case $yn in
         [Yy]* ) CONNECT_TO_TESTNET=True && break;;
         [Nn]* ) CONNECT_TO_TESTNET=False && break;;
@@ -45,7 +44,6 @@ if [ "$CONNECT_TO_TESTNET" = "True" ]; then
     echo "Installing correct viem version..."
     npm install viem@2.22.6 --legacy-peer-deps
 
-    # Check if the yarn command exists; if not, install Yarn.
     source ~/.bashrc
 
     if ! command -v yarn >/dev/null 2>&1; then
@@ -56,7 +54,7 @@ if [ "$CONNECT_TO_TESTNET" = "True" ]; then
             sudo apt update && sudo apt install -y yarn
         else
             echo "Yarn is not installed. Installing Yarn..."
-            curl -o- -L https://yarnpkg.com/install.sh | sh
+            curl -o- -L https://yarnpkg.com/install.sh | bash
             echo 'export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"' >> ~/.bashrc
             source ~/.bashrc
         fi
@@ -67,7 +65,6 @@ if [ "$CONNECT_TO_TESTNET" = "True" ]; then
 
     SERVER_PID=$!
     sleep 5
-    open http://localhost:3000
     cd ..
 
     while [ ! -f "modal-login/temp-data/userData.json" ]; do
@@ -150,5 +147,4 @@ else
         --config "$CONFIG_PATH"
 fi
 
-wait
-
+wait  # Keep script running until Ctrl+C
