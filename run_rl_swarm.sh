@@ -13,13 +13,11 @@ DEFAULT_HOST_MULTI_ADDRS="/ip4/0.0.0.0/tcp/38331"
 PEER_MULTI_ADDRS=${PEER_MULTI_ADDRS:-$DEFAULT_PEER_MULTI_ADDRS}
 HOST_MULTI_ADDRS=${HOST_MULTI_ADDRS:-$DEFAULT_HOST_MULTI_ADDRS}
 
-# Установка cloudflared при необходимости
-if ! command -v cloudflared >/dev/null 2>&1; then
-    echo -e "\n\e[1;33m[+] Устанавливаем cloudflared...\e[0m"
-    wget -O cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-    chmod +x cloudflared
-    sudo mv cloudflared /usr/local/bin/
-fi
+# Устанавливаем python и pip, если нет
+echo -e "\n\e[1;33m[0/4] Проверка Python и pip...\e[0m"
+sudo apt update
+sudo apt install -y python3 python3-pip
+sudo ln -s $(which python3) /usr/bin/python || true
 
 # Спрашиваем про подключение к Testnet
 read -p $'\e[1;36mПодключиться к Testnet? [Y/n]: \e[0m' yn
@@ -65,8 +63,7 @@ if [[ "$CONNECT_TO_TESTNET" == "True" ]]; then
     ORG_ID=$(awk 'BEGIN { FS = "\"" } !/^[ \t]*[{}]/ { print $(NF - 1); exit }' modal-login/temp-data/userData.json)
 fi
 
-# Установка Python зависимостей
-sudo apt update && sudo apt install -y python3-pip > /dev/null
+# Ставим питон зависимости
 pip install -r "$ROOT/requirements-hivemind.txt" > /dev/null
 pip install -r "$ROOT/requirements.txt" > /dev/null
 
@@ -77,7 +74,7 @@ else
     CONFIG_PATH="$ROOT/hivemind_exp/configs/mac/grpo-qwen-2.5-0.5b-deepseek-r1.yaml"
 fi
 
-# Hugging Face token
+# Хаб токен
 if [ -n "$HF_TOKEN" ]; then
     HUGGINGFACE_ACCESS_TOKEN=$HF_TOKEN
 else
@@ -90,7 +87,7 @@ else
     fi
 fi
 
-# Запуск ноды
+# Запуск
 echo -e "\n\e[1;35mЗапуск ноды...\e[0m"
 if [ -n "$ORG_ID" ]; then
     python -m hivemind_exp.gsm8k.train_single_gpu \
