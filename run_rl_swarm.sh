@@ -15,15 +15,12 @@ export HF_HUB_DOWNLOAD_TIMEOUT=120  # 2 minutes
 DEFAULT_PUB_MULTI_ADDRS=""
 PUB_MULTI_ADDRS=${PUB_MULTI_ADDRS:-$DEFAULT_PUB_MULTI_ADDRS}
 
-#Check if peer multi-address is given else set to default
 DEFAULT_PEER_MULTI_ADDRS="/ip4/38.101.215.13/tcp/30002/p2p/QmQ2gEXoPJg6iMBSUFWGzAabS2VhnzuS782Y637hGjfsRJ"
 PEER_MULTI_ADDRS=${PEER_MULTI_ADDRS:-$DEFAULT_PEER_MULTI_ADDRS}
 
-#Check if host multi-address is given else set to default
 DEFAULT_HOST_MULTI_ADDRS="/ip4/0.0.0.0/tcp/38331"
 HOST_MULTI_ADDRS=${HOST_MULTI_ADDRS:-$DEFAULT_HOST_MULTI_ADDRS}
 
-# Path to an RSA private key. If this path does not exist, a new key pair will be created.
 DEFAULT_IDENTITY_PATH="$ROOT"/swarm.pem
 IDENTITY_PATH=${IDENTITY_PATH:-$DEFAULT_IDENTITY_PATH}
 
@@ -41,9 +38,6 @@ if [ "$CONNECT_TO_TESTNET" = "True" ]; then
     echo "Please login to create an Ethereum Server Wallet"
     cd modal-login
 
-    echo "Installing correct viem version..."
-    npm install viem@2.22.6 --legacy-peer-deps
-
     source ~/.bashrc
 
     if ! command -v yarn >/dev/null 2>&1; then
@@ -54,17 +48,23 @@ if [ "$CONNECT_TO_TESTNET" = "True" ]; then
             sudo apt update && sudo apt install -y yarn
         else
             echo "Yarn is not installed. Installing Yarn..."
-            curl -o- -L https://yarnpkg.com/install.sh | bash
+            curl -o- -L https://yarnpkg.com/install.sh | sh
             echo 'export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"' >> ~/.bashrc
             source ~/.bashrc
         fi
     fi
 
+    echo "Installing dependencies..."
     yarn install
+
+    echo "Fixing viem..."
+    npm install viem@2.22.6 --legacy-peer-deps
+
     yarn dev > /dev/null 2>&1 &
 
     SERVER_PID=$!
     sleep 5
+    open http://localhost:3000
     cd ..
 
     while [ ! -f "modal-login/temp-data/userData.json" ]; do
@@ -113,7 +113,6 @@ fi
 
 echo ">> Done!"
 echo ""
-echo ""
 
 if [ -n "${HF_TOKEN}" ]; then
    HUGGINGFACE_ACCESS_TOKEN=${HF_TOKEN}
@@ -128,7 +127,6 @@ else
 fi
 
 echo ""
-echo ""
 echo "Good luck in the swarm!"
 
 if [ -n "$ORG_ID" ]; then
@@ -142,9 +140,9 @@ else
         --hf_token "$HUGGINGFACE_ACCESS_TOKEN" \
         --identity_path "$IDENTITY_PATH" \
         --public_maddr "$PUB_MULTI_ADDRS" \
-        --initial_peers "$PEER_MULTI_ADDRS"\
+        --initial_peers "$PEER_MULTI_ADDRS" \
         --host_maddr "$HOST_MULTI_ADDRS" \
         --config "$CONFIG_PATH"
 fi
 
-wait  # Keep script running until Ctrl+C
+wait
