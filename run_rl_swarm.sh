@@ -146,6 +146,11 @@ fi
 
 echo_green ">> Done!"
 
+if ! command -v python &> /dev/null; then
+    ln -s /usr/bin/python3 /usr/bin/python
+    echo_green ">> Created symlink: /usr/bin/python -> /usr/bin/python3"
+fi
+
 HF_TOKEN=${HF_TOKEN:-""}
 if [ -n "${HF_TOKEN}" ]; then # Check if HF_TOKEN is already set and use if so. Else give user a prompt to choose.
     HUGGINGFACE_ACCESS_TOKEN=${HF_TOKEN}
