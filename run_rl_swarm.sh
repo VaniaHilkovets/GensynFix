@@ -77,7 +77,7 @@ if [ "$CONNECT_TO_TESTNET" = "True" ]; then
     echo "Please login to create an Ethereum Server Wallet"
     cd modal-login
     # Check if the yarn command exists; if not, install Yarn.
-    source ~/.bashrc
+    (set +u; source ~/.bashrc; set -u)
     if ! command -v yarn > /dev/null 2>&1; then
         # Detect Ubuntu (including WSL Ubuntu) and install Yarn accordingly
         if grep -qi "ubuntu" /etc/os-release 2> /dev/null || uname -r | grep -qi "microsoft"; then
@@ -89,7 +89,7 @@ if [ "$CONNECT_TO_TESTNET" = "True" ]; then
             echo "Yarn is not installed. Installing Yarn..."
             curl -o- -L https://yarnpkg.com/install.sh | sh
             echo 'export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"' >> ~/.bashrc
-            source ~/.bashrc
+            (set +u; source ~/.bashrc; set -u)
         fi
     fi
     yarn install
@@ -98,7 +98,7 @@ if [ "$CONNECT_TO_TESTNET" = "True" ]; then
     SERVER_PID=$!  # Store the process ID
     echo "Started server process: $SERVER_PID"
     sleep 5
-    open http://localhost:3000
+    #open http://localhost:3000
     cd ..
 
     echo_green ">> Waiting for modal userData.json to be created..."
