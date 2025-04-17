@@ -132,6 +132,9 @@ echo_green ">> Getting requirements..."
 pip_install "$ROOT"/requirements-hivemind.txt
 pip_install "$ROOT"/requirements.txt
 
+echo_green ">> Fixing jinja2 version..."
+pip install --upgrade "jinja2>=3.1.0"
+
 if ! command -v nvidia-smi &> /dev/null; then
     # You don't have a NVIDIA GPU
     CONFIG_PATH="$ROOT/hivemind_exp/configs/mac/grpo-qwen-2.5-0.5b-deepseek-r1.yaml"
