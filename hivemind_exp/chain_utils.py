@@ -127,13 +127,18 @@ def send_via_api(org_id, method, args):
 
 
 def setup_web3() -> Web3:
-    # Check testnet connection.
-    web3 = Web3(Web3.HTTPProvider(ALCHEMY_URL))
-    if web3.is_connected():
-        logger.info("✅ Connected to Gensyn Testnet")
-    else:
-        raise Exception("Failed to connect to Gensyn Testnet")
-    return web3
+    # Try connection a few times in case of initial flakiness
+    for attempt in range(5):
+        web3 = Web3(Web3.HTTPProvider(ALCHEMY_URL))
+        if web3.is_connected():
+            logger.info("✅ Connected to Gensyn Testnet")
+            return web3
+        else:
+            logger.warning(f"Attempt {attempt+1}/5: Connection failed. Retrying...")
+            import time
+            time.sleep(3)
+
+    raise Exception("Failed to connect to Gensyn Testnet")
 
 
 def setup_account(web3: Web3, private_key) -> Account:
