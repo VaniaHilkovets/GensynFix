@@ -98,7 +98,7 @@ if [ "$CONNECT_TO_TESTNET" = "True" ]; then
     SERVER_PID=$!  # Store the process ID
     echo "Started server process: $SERVER_PID"
     sleep 5
-    #open http://localhost:3000
+    open http://localhost:3000
     cd ..
 
     echo_green ">> Waiting for modal userData.json to be created..."
