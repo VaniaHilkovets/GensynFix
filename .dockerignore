@@ -6,3 +6,9 @@ bazel-*
 user
 
 genrl-swarm/
+
+**node_modules/
+**__pycache__/
+**/*.py[cod]
+**.next/
+configs/
