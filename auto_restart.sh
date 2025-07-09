@@ -20,15 +20,31 @@ KEYWORDS=(
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
 
 kill_related_procs() {
-  echo "[$(date)] ? Завершаем все процессы из папки $SCRIPT_DIR, кроме screen и tmux..."
-  # Получаем список PID и имя процесса, фильтруем исключая screen и tmux
-  while read -r pid comm; do
+  echo "[$(date)] ? Завершаем процессы из папки $SCRIPT_DIR, исключая screen, tmux и шеллы..."
+
+  while read -r pid comm ppid pcomm; do
+    # Проверяем, что cwd совпадает
     if [ -d "/proc/$pid/cwd" ] && [ "$(readlink -f /proc/$pid/cwd)" = "$SCRIPT_DIR" ]; then
-      if [[ "$comm" != "screen" && "$comm" != "tmux" ]]; then
-        kill -9 "$pid" 2>/dev/null
+      
+      # Исключаем screen, tmux, шеллы
+      if [[ "$comm" =~ ^(screen|tmux|bash|sh|zsh)$ ]]; then
+        continue
       fi
+
+      # Исключаем процессы, у которых родитель — screen, tmux или шелл
+      if [[ "$pcomm" =~ ^(screen|tmux|bash|sh|zsh)$ ]]; then
+        continue
+      fi
+
+      echo "[$(date)]   Убиваем PID=$pid ($comm) с PPID=$ppid ($pcomm)"
+      kill -9 "$pid" 2>/dev/null
     fi
-  done < <(ps -eo pid,comm --no-headers)
+  done < <(
+    ps -eo pid,comm,ppid --no-headers | while read pid comm ppid; do
+      pcomm=$(ps -p "$ppid" -o comm=)
+      echo "$pid $comm $ppid $pcomm"
+    done
+  )
 }
 
 while true; do
