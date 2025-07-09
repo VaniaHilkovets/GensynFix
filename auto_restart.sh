@@ -20,12 +20,15 @@ KEYWORDS=(
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
 
 kill_related_procs() {
-  echo "[$(date)] ? Завершаем все процессы из папки $SCRIPT_DIR..."
-  for pid in $(ps -eo pid | tail -n +2); do
+  echo "[$(date)] ? Завершаем все процессы из папки $SCRIPT_DIR, кроме screen и tmux..."
+  # Получаем список PID и имя процесса, фильтруем исключая screen и tmux
+  while read -r pid comm; do
     if [ -d "/proc/$pid/cwd" ] && [ "$(readlink -f /proc/$pid/cwd)" = "$SCRIPT_DIR" ]; then
-      kill -9 "$pid" 2>/dev/null
+      if [[ "$comm" != "screen" && "$comm" != "tmux" ]]; then
+        kill -9 "$pid" 2>/dev/null
+      fi
     fi
-  done
+  done < <(ps -eo pid,comm --no-headers)
 }
 
 while true; do
@@ -38,7 +41,6 @@ while true; do
   ( sleep 1 && printf "n\n\n\n" ) | bash "$SCRIPT" 2>&1 | tee "$TMP_LOG" &
   PID=$!
 
-  last_mod=$(date +%s)
   while kill -0 "$PID" 2>/dev/null; do
     sleep 5
 
