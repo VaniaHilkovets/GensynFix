@@ -19,38 +19,32 @@ KEYWORDS=(
 
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
 
-kill_related_procs() {
-  echo "[$(date)] ? Завершаем процессы из папки $SCRIPT_DIR, исключая screen, tmux и шеллы..."
+kill_node_procs() {
+  echo "[$(date)] Завершаем процессы ноды из папки $SCRIPT_DIR..."
 
   while read -r pid comm ppid pcomm; do
-    # Проверяем, что cwd совпадает
+    # Проверяем, что cwd совпадает с папкой скрипта
     if [ -d "/proc/$pid/cwd" ] && [ "$(readlink -f /proc/$pid/cwd)" = "$SCRIPT_DIR" ]; then
-      
-      # Исключаем screen, tmux, шеллы
-      if [[ "$comm" =~ ^(screen|tmux|bash|sh|zsh)$ ]]; then
-        continue
+      # Ограничиваем завершение только процессами, связанными с нодой
+      if [[ "$comm" =~ ^(python|python3|bash|sh)$ && "$pcomm" =~ ^(bash|sh|run_rl_swarm.sh)$ ]]; then
+        echo "[$(date)] Убиваем PID=$pid ($comm) с PPID=$ppid ($pcomm)"
+        kill -9 "$pid" 2>/dev/null
+      else
+        echo "[$(date)] Пропускаем PID=$pid ($comm) с PPID=$ppid ($pcomm) — не связан с нодой"
       fi
-
-      # Исключаем процессы, у которых родитель — screen, tmux или шелл
-      if [[ "$pcomm" =~ ^(screen|tmux|bash|sh|zsh)$ ]]; then
-        continue
-      fi
-
-      echo "[$(date)]   Убиваем PID=$pid ($comm) с PPID=$ppid ($pcomm)"
-      kill -9 "$pid" 2>/dev/null
     fi
   done < <(
     ps -eo pid,comm,ppid --no-headers | while read pid comm ppid; do
-      pcomm=$(ps -p "$ppid" -o comm=)
+      pcomm=$(ps -p "$ppid" -o comm= 2>/dev/null || echo "unknown")
       echo "$pid $comm $ppid $pcomm"
     done
   )
 }
 
 while true; do
-  echo "[$(date)] ?? Запуск Gensyn-ноды..."
+  echo "[$(date)] Запуск Gensyn-ноды..."
 
-  # Удалим старый лог
+  # Удаляем старый лог
   rm -f "$TMP_LOG"
 
   # Запускаем скрипт с автоответами
@@ -66,25 +60,25 @@ while true; do
       idle_time=$((now - current_mod))
 
       if (( idle_time > MAX_IDLE )); then
-        echo "[$(date)] ⚠️ Лог не обновлялся более $((MAX_IDLE/60)) минут. Перезапуск ноды..."
+        echo "[$(date)] Лог не обновлялся более $((MAX_IDLE/60)) минут. Перезапуск ноды..."
         kill -9 "$PID" 2>/dev/null
         sleep 3
-        kill_related_procs
+        kill_node_procs
         break
       fi
     fi
 
     for ERR in "${KEYWORDS[@]}"; do
       if grep -q "$ERR" "$TMP_LOG"; then
-        echo "[$(date)] ? Найдено '$ERR'. Перезапуск..."
+        echo "[$(date)] Найдено '$ERR'. Перезапуск..."
         kill -9 "$PID" 2>/dev/null
         sleep 3
-        kill_related_procs
+        kill_node_procs
         break 2
       fi
     done
   done
 
-  echo "[$(date)] ?? Процесс завершён. Перезапуск через 3 секунды..."
+  echo "[$(date)] Процесс завершён. Перезапуск через 3 секунды..."
   sleep 3
 done
