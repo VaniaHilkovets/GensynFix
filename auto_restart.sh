@@ -19,7 +19,7 @@ KEYWORDS=(
   "Identity from .* is already taken by another peer"
 )
 
-# Сторожевой процесс, чтобы tmux не закрывался
+# Сторожевой процесс, чтобы сессия screen/tmux не закрывалась
 sleep infinity &
 SLEEP_GUARD_PID=$!
 trap "kill $SLEEP_GUARD_PID 2>/dev/null" EXIT
@@ -46,14 +46,16 @@ kill_node_procs() {
   echo "[$(date)] Текущие релевантные процессы перед убийством:"
   ps aux | grep -E "python|bash|sh|p2p|daemon|hivemind|p2pd|rl-swarm|genrl|wandb|hydra|swarm_launcher|GensynFix|torch_shm_manager|gpu_stats" | grep -v grep || echo "Нет процессов"
 
-  # Цикл по cwd (расширен на поддир и новые comm)
+  # Расширенный поиск и завершение процессов
   while read -r pid comm ppid pcomm; do
+    # Проверяем, что cwd совпадает с папкой скрипта или поддиректорией
     if [ -d "/proc/$pid/cwd" ] && [[ "$(readlink -f /proc/$pid/cwd)" == *"$SCRIPT_DIR"* ]]; then
-      if [[ "$comm" =~ ^(python|python3|bash|sh|p2p|daemon|hivemind|p2pd|wandb|gpu_stats|torch_shm_manager)$ ]]; then
+      # Расширяем фильтры: убиваем все релевантные процессы ноды, но пропускаем сам wrapper (по имени или PID)
+      if [[ "$comm" =~ ^(python|python3|bash|sh|p2p|daemon|hivemind|p2pd|wandb|gpu_stats|torch_shm_manager)$ ]] && [ "$pid" != "$$" ] && [ "$pid" != "$SLEEP_GUARD_PID" ]; then
         echo "[$(date)] Убиваем PID=$pid ($comm) с PPID=$ppid ($pcomm)"
         kill -9 "$pid" 2>/dev/null
       else
-        echo "[$(date)] Пропускаем PID=$pid ($comm) с PPID=$ppid ($pcomm) — не связан с нодой"
+        echo "[$(date)] Пропускаем PID=$pid ($comm) с PPID=$ppid ($pcomm) — не связан с нодой или это wrapper/сторожевой процесс"
       fi
     fi
   done < <(
@@ -63,7 +65,7 @@ kill_node_procs() {
     done
   )
 
-  # Расширенный pkill по паттернам из diff (точные аргументы)
+  # Дополнительно: убиваем любые зависшие процессы по имени, связанные с проектом (но не wrapper)
   pkill -9 -f "rl-swarm" 2>/dev/null
   pkill -9 -f "hivemind" 2>/dev/null
   pkill -9 -f "p2pd" 2>/dev/null  # Ловит все p2pd
@@ -74,7 +76,7 @@ kill_node_procs() {
   pkill -9 -f "gpu_stats" 2>/dev/null
   pkill -9 -f "torch_shm_manager" 2>/dev/null
   pkill -9 -f "while true; do sleep 1;head -v -n 8 /proc/meminfo" 2>/dev/null  # Мониторинг-баш
-  sleep 2
+  sleep 2  # Даем время на завершение
 
   # Лог после убийства
   echo "[$(date)] Процессы после убийства:"
@@ -87,8 +89,10 @@ kill_node_procs() {
 while true; do
   echo "[$(date)] Запуск Gensyn-ноды..."
 
+  # Удаляем старый лог
   rm -f "$TMP_LOG"
 
+  # Запускаем скрипт с автоответами
   ( sleep 1 && printf "n\n\n\n" ) | bash "$SCRIPT" 2>&1 | tee "$TMP_LOG" &
   PID=$!
 
