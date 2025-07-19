@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 SCRIPT="./run_rl_swarm.sh"
 TMP_LOG="/tmp/rlswarm_stdout.log"
@@ -17,6 +18,11 @@ KEYWORDS=(
   "requests.exceptions.ConnectionError"
   "Identity from .* is already taken by another peer"
 )
+
+# Сторожевой процесс, чтобы tmux не закрывался
+sleep infinity &
+SLEEP_GUARD_PID=$!
+trap "kill $SLEEP_GUARD_PID 2>/dev/null" EXIT
 
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
 SWARM_PEM="$SCRIPT_DIR/swarm.pem"
@@ -92,6 +98,3 @@ while true; do
   echo "[$(date)] Процесс завершён. Перезапуск через 3 секунды..."
   sleep 3
 done
-
-# Открыть bash чтобы screen не закрылся
-exec bash
