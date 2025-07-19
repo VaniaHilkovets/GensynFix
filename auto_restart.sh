@@ -23,9 +23,7 @@ kill_node_procs() {
   echo "[$(date)] Завершаем процессы ноды из папки $SCRIPT_DIR..."
 
   while read -r pid comm ppid pcomm; do
-    # Проверяем, что cwd совпадает с папкой скрипта
     if [ -d "/proc/$pid/cwd" ] && [ "$(readlink -f /proc/$pid/cwd)" = "$SCRIPT_DIR" ]; then
-      # Ограничиваем завершение только процессами, связанными с нодой
       if [[ "$comm" =~ ^(python|python3|bash|sh)$ && "$pcomm" =~ ^(bash|sh|run_rl_swarm.sh)$ ]]; then
         echo "[$(date)] Убиваем PID=$pid ($comm) с PPID=$ppid ($pcomm)"
         kill -9 "$pid" 2>/dev/null
@@ -41,22 +39,19 @@ kill_node_procs() {
   )
 
   echo "[$(date)] Дополнительно убиваем подвисшие процессы..."
+  pkill -9 -f "p2pd.*$SCRIPT_DIR/swarm.pem" 2>/dev/null
   pkill -9 -f "swarm_launcher" 2>/dev/null
   pkill -9 -f "hivemind" 2>/dev/null
-  pkill -9 -f "p2pd" 2>/dev/null
   pkill -9 -f "gpu_stats" 2>/dev/null
   pkill -9 -f "torch_shm_manager" 2>/dev/null
-  pkill -9 -f "/usr/local/lib/python3.10/dist-packages/hivemind/hivemind_cli/p2pd" 2>/dev/null
   rm -f /tmp/hivemind-p2pd-*.sock 2>/dev/null
 }
 
 while true; do
   echo "[$(date)] Запуск Gensyn-ноды..."
 
-  # Удаляем старый лог
   rm -f "$TMP_LOG"
 
-  # Запускаем скрипт с автоответами
   ( sleep 1 && printf "n\n\n\n" ) | bash "$SCRIPT" 2>&1 | tee "$TMP_LOG" &
   PID=$!
 
