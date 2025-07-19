@@ -15,18 +15,24 @@ KEYWORDS=(
   "error was detected while running rl-swarm"
   "Connection refused"
   "requests.exceptions.ConnectionError"
+  "Identity from .* is already taken by another peer"
 )
 
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
+SWARM_PEM="$SCRIPT_DIR/swarm.pem"
 
 kill_node_procs() {
   echo "[$(date)] Завершаем процессы ноды из папки $SCRIPT_DIR..."
 
+  if [ -f "$SWARM_PEM" ]; then
+    echo "[$(date)] Убиваем процессы, использующие $SWARM_PEM..."
+    fuser -k "$SWARM_PEM" 2>/dev/null
+    sleep 1
+  fi
+
   while read -r pid comm ppid pcomm; do
-    # Проверяем, что cwd совпадает с папкой скрипта
     if [ -d "/proc/$pid/cwd" ] && [ "$(readlink -f /proc/$pid/cwd)" = "$SCRIPT_DIR" ]; then
-      # Ограничиваем завершение только процессами, связанными с нодой
-      if [[ "$comm" =~ ^(python|python3|bash|sh)$ && "$pcomm" =~ ^(bash|sh|run_rl_swarm.sh)$ ]]; then
+      if [[ "$comm" =~ ^(python|python3|bash|sh|p2p|daemon|hivemind|p2pd)$ ]]; then
         echo "[$(date)] Убиваем PID=$pid ($comm) с PPID=$ppid ($pcomm)"
         kill -9 "$pid" 2>/dev/null
       else
@@ -39,15 +45,19 @@ kill_node_procs() {
       echo "$pid $comm $ppid $pcomm"
     done
   )
+
+  pkill -9 -f "rl-swarm" 2>/dev/null
+  pkill -9 -f "hivemind" 2>/dev/null
+  pkill -9 p2pd 2>/dev/null
+  pkill -9 -f p2pd 2>/dev/null
+  sleep 2
 }
 
 while true; do
   echo "[$(date)] Запуск Gensyn-ноды..."
 
-  # Удаляем старый лог
   rm -f "$TMP_LOG"
 
-  # Запускаем скрипт с автоответами
   ( sleep 1 && printf "n\n\n\n" ) | bash "$SCRIPT" 2>&1 | tee "$TMP_LOG" &
   PID=$!
 
@@ -82,3 +92,6 @@ while true; do
   echo "[$(date)] Процесс завершён. Перезапуск через 3 секунды..."
   sleep 3
 done
+
+# Открыть bash чтобы screen не закрылся
+exec bash
