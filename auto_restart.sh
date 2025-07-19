@@ -46,6 +46,7 @@ kill_node_procs() {
   pkill -9 -f "p2pd" 2>/dev/null
   pkill -9 -f "gpu_stats" 2>/dev/null
   pkill -9 -f "torch_shm_manager" 2>/dev/null
+  pkill -9 -f "/usr/local/lib/python3.10/dist-packages/hivemind/hivemind_cli/p2pd" 2>/dev/null
   rm -f /tmp/hivemind-p2pd-*.sock 2>/dev/null
 }
 
