@@ -3,8 +3,6 @@
 SCRIPT="./run_rl_swarm.sh"
 TMP_LOG="/tmp/rlswarm_stdout.log"
 MAX_IDLE=600  # 10 минут
-SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
-SWARM_PEM="$SCRIPT_DIR/swarm.pem"
 
 KEYWORDS=(
   "BlockingIOError"
@@ -17,39 +15,43 @@ KEYWORDS=(
   "error was detected while running rl-swarm"
   "Connection refused"
   "requests.exceptions.ConnectionError"
-  "Identity from .* is already taken by another peer"
 )
 
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
+
 kill_node_procs() {
-  echo "[$(date)] Убиваем процессы из $SCRIPT_DIR..."
+  echo "[$(date)] Завершаем процессы ноды из папки $SCRIPT_DIR..."
 
-  if [ -f "$SWARM_PEM" ]; then
-    lsof "$SWARM_PEM" 2>/dev/null | awk 'NR>1 {print $2}' | sort -u | xargs -r kill -9
-  fi
-
-  for pid in $(ls /proc | grep -E '^[0-9]+$'); do
-    cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)
-    if [[ "$cwd" == "$SCRIPT_DIR" ]]; then
-      kill -9 "$pid" 2>/dev/null
+  while read -r pid comm ppid pcomm; do
+    if [ -d "/proc/$pid/cwd" ] && [ "$(readlink -f /proc/$pid/cwd)" = "$SCRIPT_DIR" ]; then
+      if [[ "$comm" =~ ^(python|python3|bash|sh|node)$ && "$pcomm" =~ ^(bash|sh|run_rl_swarm.sh|node|npm)$ ]]; then
+        echo "[$(date)] Убиваем PID=$pid ($comm) с PPID=$ppid ($pcomm)"
+        kill -9 "$pid" 2>/dev/null
+      else
+        echo "[$(date)] Пропускаем PID=$pid ($comm) с PPID=$ppid ($pcomm) — не связан с нодой"
+      fi
     fi
-  done
+  done < <(
+    ps -eo pid,comm,ppid --no-headers | while read pid comm ppid; do
+      pcomm=$(ps -p "$ppid" -o comm= 2>/dev/null || echo "unknown")
+      echo "$pid $comm $ppid $pcomm"
+    done
+  )
 
+  echo "[$(date)] Убиваем зависшие процессы hivemind, modal-login, next.js..."
+
+  # Точные процессы с grep -f:
   pgrep -f hivemind_cli/p2pd | xargs -r kill -9
   pgrep -f node_modules/.bin/next | xargs -r kill -9
   pgrep -f modal-login | xargs -r kill -9
+  pgrep -f "rgym_exp.runner.swarm_launcher" | xargs -r kill -9
 }
 
 while true; do
   echo "[$(date)] Запуск Gensyn-ноды..."
   rm -f "$TMP_LOG"
 
-  if [ ! -f "$SWARM_PEM" ]; then
-    echo "[$(date)] [ОШИБКА] swarm.pem не найден. Ждём 5 минут..."
-    sleep 300
-    continue
-  fi
-
-  (sleep 1 && printf "n\n\n\n") | bash "$SCRIPT" 2>&1 | tee "$TMP_LOG" &
+  ( sleep 1 && printf "n\n\n\n" ) | bash "$SCRIPT" 2>&1 | tee "$TMP_LOG" &
   PID=$!
 
   while kill -0 "$PID" 2>/dev/null; do
@@ -61,9 +63,9 @@ while true; do
       idle_time=$((now - current_mod))
 
       if (( idle_time > MAX_IDLE )); then
-        echo "[$(date)] Лог не обновляется $((MAX_IDLE/60)) мин. Перезапуск..."
-        kill -9 "$PID"
-        sleep 2
+        echo "[$(date)] Лог не обновлялся более $((MAX_IDLE/60)) минут. Перезапуск ноды..."
+        kill -9 "$PID" 2>/dev/null
+        sleep 3
         kill_node_procs
         break
       fi
@@ -72,8 +74,8 @@ while true; do
     for ERR in "${KEYWORDS[@]}"; do
       if grep -q "$ERR" "$TMP_LOG"; then
         echo "[$(date)] Найдено '$ERR'. Перезапуск..."
-        kill -9 "$PID"
-        sleep 2
+        kill -9 "$PID" 2>/dev/null
+        sleep 3
         kill_node_procs
         break 2
       fi
