@@ -22,39 +22,48 @@ SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
 SWARM_PEM="$SCRIPT_DIR/swarm.pem"
 
 kill_node_procs() {
-  echo "[$(date)] Завершаем процессы ноды из папки $SCRIPT_DIR..."
+  echo "[$(date)] Завершаем процессы из папки $SCRIPT_DIR..."
 
   # Убиваем процессы, использующие swarm.pem
   if [ -f "$SWARM_PEM" ]; then
     echo "[$(date)] Убиваем процессы, использующие $SWARM_PEM..."
-    fuser -k "$SWARM_PEM" 2>/dev/null
+    lsof "$SWARM_PEM" 2>/dev/null | awk 'NR>1 {print $2}' | sort -u | xargs -r kill -9
     sleep 1
   fi
 
-  while read -r pid comm ppid pcomm; do
-    if [ -d "/proc/$pid/cwd" ] && [ "$(readlink -f /proc/$pid/cwd)" = "$SCRIPT_DIR" ]; then
-      if [[ "$comm" =~ ^(python|python3|bash|sh)$ && "$pcomm" =~ ^(bash|sh|run_rl_swarm.sh)$ ]]; then
-        echo "[$(date)] Убиваем PID=$pid ($comm) с PPID=$ppid ($pcomm)"
-        kill -9 "$pid" 2>/dev/null
-      else
-        echo "[$(date)] Пропускаем PID=$pid ($comm) с PPID=$ppid ($pcomm) — не связан с нодой"
-      fi
+  # Убиваем все процессы, чей cwd = SCRIPT_DIR
+  for pid in $(ls /proc | grep -E '^[0-9]+$'); do
+    cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)
+    if [[ "$cwd" == "$SCRIPT_DIR" ]]; then
+      echo "[$(date)] Убиваем процесс PID=$pid, cwd=$cwd"
+      kill -9 "$pid" 2>/dev/null
     fi
-  done < <(
-    ps -eo pid,comm,ppid --no-headers | while read pid comm ppid; do
-      pcomm=$(ps -p "$ppid" -o comm= 2>/dev/null || echo "unknown")
-      echo "$pid $comm $ppid $pcomm"
-    done
-  )
+  done
+
+  # hivemind p2pd
+  echo "[$(date)] Убиваем зависшие p2pd (hivemind)..."
+  pgrep -f hivemind_cli/p2pd | xargs -r kill -9
+
+  # modal next.js
+  echo "[$(date)] Убиваем next build (modal-login)..."
+  pgrep -f node_modules/.bin/next | xargs -r kill -9
+
+  # modal-login
+  echo "[$(date)] Убиваем modal-login процессы..."
+  pgrep -f modal-login | xargs -r kill -9
 }
 
 while true; do
   echo "[$(date)] Запуск Gensyn-ноды..."
-
-  # Удаляем старый лог
   rm -f "$TMP_LOG"
 
-  # Запускаем скрипт с автоответами
+  if [ ! -f "$SWARM_PEM" ]; then
+    echo "[$(date)] [ОШИБКА] swarm.pem не найден: $SWARM_PEM"
+    echo "Сначала запусти ./run_rl_swarm.sh вручную и подтверди генерацию ключа"
+    exit 1
+  fi
+
+  # запуск с автоответами
   ( sleep 1 && printf "n\n\n\n" ) | bash "$SCRIPT" 2>&1 | tee "$TMP_LOG" &
   PID=$!
 
@@ -67,7 +76,7 @@ while true; do
       idle_time=$((now - current_mod))
 
       if (( idle_time > MAX_IDLE )); then
-        echo "[$(date)] Лог не обновлялся более $((MAX_IDLE/60)) минут. Перезапуск ноды..."
+        echo "[$(date)] Лог не обновлялся $((MAX_IDLE/60)) мин. Перезапуск..."
         kill -9 "$PID" 2>/dev/null
         sleep 3
         kill_node_procs
