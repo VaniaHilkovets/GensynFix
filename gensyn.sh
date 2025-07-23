@@ -83,12 +83,12 @@ run_login_sequential() {
     tmux kill-session -t "$TUNNEL_SESSION" 2>/dev/null || true
     tmux new-session -d -s "$TUNNEL_SESSION" "ssh -o StrictHostKeyChecking=no -R 80:localhost:$PORT nokey@localhost.run | tee /tmp/tunnel$i.log"
 
-    echo -n "[*] Ожидаем появления ссылки... "
-    while ! grep -q 'https://' /tmp/tunnel$i.log 2>/dev/null; do
-      sleep 1
-    done
-    LINK=$(grep -o 'https://[a-z0-9.-]*\.lhr\.life' /tmp/tunnel$i.log | head -n1)
-    echo -e "\n➡️  Логин ноды $i: $LINK"
+    echo "[*] Ожидаем ссылку..."
+until LINK=$(grep -o 'https://[^ ]*' /tmp/tunnel$i.log | grep '\.lhr\.life' | head -n1); do
+  sleep 5
+done
+echo -e "\n➡️  Логин ноды $i: $LINK"
+
 
     read -p "Когда залогинился и нажал Y — жми Enter..."
 
