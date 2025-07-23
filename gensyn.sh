@@ -145,24 +145,23 @@ while true; do
     1) run_setup ;;
     2) run_login_sequential ;;
     3) run_start ;;
-    4)
-      echo "Удалить ВСЁ (y/N)?"
-      read -r YES
-      if [[ "$YES" =~ ^[Yy]$ ]]; then
-        tmux kill-server 2>/dev/null || true
-        # Kill any remaining processes related to GensynFix
-        PIDS=$(ps aux | grep -i GensynFix | grep -v grep | awk '{print $2}' 2>/dev/null)
-        if [ ! -z "$PIDS" ]; then
-          echo "Убиваем процессы: $PIDS"
-          kill -9 $PIDS 2>/dev/null || true
-        fi
-        rm -rf /root/GensynFix*
-        echo "✅ Удалено"
-      else
-        echo "❌ Отменено"
-      fi
+4)
+  echo "Удалить ВСЁ (y/N)?"
+  read -r YES
+  if [[ "$YES" =~ ^[Yy]$ ]]; then
+    tmux kill-server 2>/dev/null || true
+    # Убиваем процессы, если вдруг остались
+    PIDS=$(ps aux | grep -i GensynFix | grep -v grep | awk '{print $2}' 2>/dev/null)
+    if [ -n "$PIDS" ]; then
+      echo "Убиваем процессы: $PIDS"
+      kill -9 $PIDS 2>/dev/null || true
+    fi
+    shopt -s nullglob
+    rm -rf /root/GensynFix*
+    echo "✅ Удалено"
+  else
+    echo "❌ Отменено"
+  fi
       ;;
-    5) exit 0 ;;
-    *) echo "Неверный выбор" ;;
   esac
 done
