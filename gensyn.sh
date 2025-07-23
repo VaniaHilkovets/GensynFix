@@ -90,7 +90,7 @@ run_login_sequential() {
     done
     echo -e "\n➡️  Логин ноды $i: $LINK"
 
-    read -p "Когда залогинился и нажал Y — жми Enter..."
+    read -p "После успешного логина — жми Enter..."
 
     echo "[+] Завершаем проброс $TUNNEL_SESSION"
     tmux kill-session -t "$TUNNEL_SESSION" 2>/dev/null || true
