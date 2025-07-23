@@ -41,6 +41,7 @@ run_setup() {
   ensure_node_version
   read -p "Сколько экземпляров нод установить? " COUNT
   echo "[+] Клонируем GensynFix..."
+  rm -rf "$BASE_DIR/GensynFix"  # <--- добавлено
   git clone "$REPO_URL" "$BASE_DIR/GensynFix"
   chmod +x "$BASE_DIR/GensynFix/"*.sh
 
