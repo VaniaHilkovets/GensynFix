@@ -41,7 +41,7 @@ run_setup() {
   ensure_node_version
   read -p "Сколько экземпляров нод установить? " COUNT
   echo "[+] Клонируем GensynFix..."
-  rm -rf "$BASE_DIR/GensynFix"  # <--- добавлено
+  rm -rf "$BASE_DIR/GensynFix"
   git clone "$REPO_URL" "$BASE_DIR/GensynFix"
   chmod +x "$BASE_DIR/GensynFix/"*.sh
 
@@ -84,12 +84,11 @@ run_login_sequential() {
     tmux kill-session -t "$TUNNEL_SESSION" 2>/dev/null || true
     tmux new-session -d -s "$TUNNEL_SESSION" "ssh -o StrictHostKeyChecking=no -R 80:localhost:$PORT nokey@localhost.run | tee /tmp/tunnel$i.log"
 
-    echo "[*] Ожидаем ссылку..."
-until LINK=$(grep -o 'https://[^ ]*' /tmp/tunnel$i.log | grep '\.lhr\.life' | head -n1); do
-  sleep 5
-done
-echo -e "\n➡️  Логин ноды $i: $LINK"
-
+    echo "[*] Ожидаем появления ссылки..."
+    until LINK=$(grep -o 'https://[^ ]*' /tmp/tunnel$i.log | grep '\.lhr\.life' | head -n1); do
+      sleep 5
+    done
+    echo -e "\n➡️  Логин ноды $i: $LINK"
 
     read -p "Когда залогинился и нажал Y — жми Enter..."
 
@@ -101,11 +100,7 @@ echo -e "\n➡️  Логин ноды $i: $LINK"
   sleep $LOGIN_WAIT_TIMEOUT
 
   for i in $(seq 1 $COUNT); do
-    TUNNEL_SESSION="tunnel$i"
-    tmux kill-session -t "$TUNNEL_SESSION" 2>/dev/null || true
-  done
-
-  for i in $(seq 1 $COUNT); do
+    tmux kill-session -t "tunnel$i" 2>/dev/null || true
     tmux kill-session -t "node$i" 2>/dev/null || true
   done
   echo "[✓] Все сессии завершены. Готово к запуску."
@@ -113,7 +108,6 @@ echo -e "\n➡️  Логин ноды $i: $LINK"
 
 run_start() {
   ensure_node_version
-  # Check if /usr/bin/python exists before creating the symbolic link
   if [ ! -e /usr/bin/python ]; then
     ln -s /usr/bin/python3 /usr/bin/python
   fi
@@ -124,7 +118,6 @@ run_start() {
     DIR="$BASE_DIR/GensynFix"
     [[ $i -gt 1 ]] && DIR="$BASE_DIR/GensynFix$i"
     PORT=$((2999 + i))
-
     CMD="cd $DIR && LOGIN_PORT=$PORT ./auto_restart.sh"
 
     if [[ $i -eq 1 ]]; then
@@ -145,23 +138,28 @@ while true; do
     1) run_setup ;;
     2) run_login_sequential ;;
     3) run_start ;;
-4)
-  echo "Удалить ВСЁ (y/N)?"
-  read -r YES
-  if [[ "$YES" =~ ^[Yy]$ ]]; then
-    tmux kill-server 2>/dev/null || true
-    # Убиваем процессы, если вдруг остались
-    PIDS=$(ps aux | grep -i GensynFix | grep -v grep | awk '{print $2}' 2>/dev/null)
-    if [ -n "$PIDS" ]; then
-      echo "Убиваем процессы: $PIDS"
-      kill -9 $PIDS 2>/dev/null || true
-    fi
-    shopt -s nullglob
-    rm -rf /root/GensynFix*
-    echo "✅ Удалено"
-  else
-    echo "❌ Отменено"
-  fi
+    4)
+      echo "Удалить ВСЁ (y/N)?"
+      read -r YES
+      if [[ "$YES" =~ ^[Yy]$ ]]; then
+        echo "💀 Убиваем все процессы, связанные с GensynFix..."
+        pkill -f GensynFix || true
+        pkill -f run_rl_swarm.sh || true
+        pkill -f auto_restart.sh || true
+        pkill -f yarn || true
+        pkill -f node || true
+        pkill -f tmux || true
+
+        echo "🧹 Удаляем все папки GensynFix..."
+        shopt -s nullglob
+        rm -rf /root/GensynFix*
+
+        echo "✅ Всё удалено"
+      else
+        echo "❌ Отменено"
+      fi
       ;;
+    5) exit 0 ;;
+    *) echo "Неверный выбор" ;;
   esac
 done
