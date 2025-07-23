@@ -156,7 +156,7 @@ while true; do
           echo "Убиваем процессы: $PIDS"
           kill -9 $PIDS 2>/dev/null || true
         fi
-        find /root -maxdepth 1 -type d -name "GensynFix*" -exec rm -rf {} +
+        rm -rf /root/GensynFix*
         echo "✅ Удалено"
       else
         echo "❌ Отменено"
