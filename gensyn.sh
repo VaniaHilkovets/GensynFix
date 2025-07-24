@@ -35,7 +35,18 @@ ensure_node_version() {
     nvm alias default 20
     nvm use default
   fi
+
+  # 🐍 pip установка
+  if ! command -v pip &>/dev/null && ! command -v pip3 &>/dev/null; then
+    echo "[!] pip не найден. Устанавливаем..."
+    apt update && apt install -y python3-pip || {
+      echo "[X] Ошибка установки pip"
+      exit 1
+    }
+    ln -sf "$(which pip3)" /usr/bin/pip
+  fi
 }
+
 
 run_setup() {
   ensure_node_version
