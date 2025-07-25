@@ -1,4 +1,3 @@
-
 #!/usr/bin/env bash
 set -euxo pipefail
 
@@ -6,11 +5,11 @@ echo "=== [1/5] Устанавливаем зависимости ==="
 apt update
 apt install -y wget curl nano
 
-echo "=== [2/5] Устанавливаем Go 1.24.5 ==="
+echo "=== [2/5] Устанавливаем Go 1.23.10 ==="
 cd /tmp
-wget -q https://go.dev/dl/go1.24.5.linux-amd64.tar.gz
+wget -q https://go.dev/dl/go1.23.10.linux-amd64.tar.gz
 rm -rf /usr/local/go
-tar -C /usr/local -xzf go1.24.5.linux-amd64.tar.gz
+tar -C /usr/local -xzf go1.23.10.linux-amd64.tar.gz
 
 if ! grep -q '/usr/local/go/bin' ~/.bashrc; then
     echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> ~/.bashrc
@@ -33,9 +32,3 @@ sleep 1
 gswarm
 
 echo "=== ✅ Установка завершена! ==="
-
-
-
-
-
-
