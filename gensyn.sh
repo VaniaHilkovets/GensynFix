@@ -3,7 +3,7 @@
 set -euo pipefail
 
 apt update
-apt install -y curl sudo tmux lsof git htop nvtop nano
+apt install -y curl sudo tmux lsof git htop nvtop nano rsync
 
 BASE_DIR="/root"
 REPO_URL="https://github.com/VaniaHilkovets/GensynFix.git"
@@ -16,7 +16,8 @@ show_menu() {
   echo "2) Логин по очереди (одна нода -> проброс -> подтверждение)"
   echo "3) Запуск всех auto_restart.sh в tmux"
   echo "4) Удалить всё"
-  echo "5) Выйти"
+  echo "5) Обновить GensynFix"
+  echo "6) Выйти"
 }
 
 ensure_node_version() {
@@ -36,7 +37,6 @@ ensure_node_version() {
     nvm use default
   fi
 
-  # 🐍 pip установка
   if ! command -v pip &>/dev/null && ! command -v pip3 &>/dev/null; then
     echo "[!] pip не найден. Устанавливаем..."
     apt update && apt install -y python3-pip || {
@@ -46,7 +46,6 @@ ensure_node_version() {
     ln -sf "$(which pip3)" /usr/bin/pip
   fi
 }
-
 
 run_setup() {
   ensure_node_version
@@ -119,6 +118,13 @@ run_login_sequential() {
 
 run_start() {
   ensure_node_version
+
+  for i in $(seq 1 $COUNT); do
+    DIR="$BASE_DIR/GensynFix"
+    [[ $i -gt 1 ]] && DIR="$BASE_DIR/GensynFix$i"
+    chmod +x "$DIR/auto_restart.sh" 2>/dev/null || true
+  done
+
   if [ ! -e /usr/bin/python ]; then
     ln -s /usr/bin/python3 /usr/bin/python
   fi
@@ -142,9 +148,51 @@ run_start() {
   tmux attach -t $SESSION
 }
 
+run_update() {
+  ensure_node_version
+
+  if [ -d "$BASE_DIR/GensynFix/.git" ]; then
+    echo "[+] Обновляем основную папку GensynFix из репозитория..."
+    pushd "$BASE_DIR/GensynFix" >/dev/null
+    if ! git pull --ff-only; then
+      echo "[!] Не удалось выполнить fast-forward pull, выполняем принудительное обновление..."
+      git fetch origin
+      git reset --hard origin/$(git rev-parse --abbrev-ref HEAD)
+    fi
+    popd >/dev/null
+  else
+    echo "[!] Папка $BASE_DIR/GensynFix не является git‑репозиторием. Обновление не выполнено."
+  fi
+
+  echo "[+] Обновляем экземпляры GensynFix..."
+  for i in $(seq 2 $COUNT); do
+    DEST="$BASE_DIR/GensynFix$i"
+    if [ -d "$DEST" ]; then
+      echo "[+] Обновляем содержимое $DEST"
+      rsync -a \
+        --exclude='.git' \
+        --exclude='swarm.pem' \
+        --exclude='modal-login/temp-data/' \
+        "$BASE_DIR/GensynFix/" "$DEST/"
+      chmod +x "$DEST/auto_restart.sh"
+    fi
+  done
+
+  for i in $(seq 1 $COUNT); do
+    FILE="$BASE_DIR/GensynFix"
+    [[ $i -gt 1 ]] && FILE="$BASE_DIR/GensynFix$i"
+    if [ -f "$FILE/run_rl_swarm.sh" ]; then
+      grep -q "LOGIN_PORT=" "$FILE/run_rl_swarm.sh" || sed -i '1i LOGIN_PORT=${LOGIN_PORT:-3000}' "$FILE/run_rl_swarm.sh"
+      sed -i 's|yarn start >> "$ROOT/logs/yarn.log" 2>&1 &|PORT=$LOGIN_PORT yarn start >> "$ROOT/logs/yarn.log" 2>\&1 \&|' "$FILE/run_rl_swarm.sh"
+    fi
+  done
+
+  echo "✅ Обновление завершено."
+}
+
 while true; do
   show_menu
-  read -p "Выбери [1-5]: " CHOICE
+  read -p "Выбери [1-6]: " CHOICE
   case "$CHOICE" in
     1) run_setup ;;
     2) run_login_sequential ;;
@@ -170,7 +218,8 @@ while true; do
         echo "❌ Отменено"
       fi
       ;;
-    5) exit 0 ;;
+    5) run_update ;;
+    6) exit 0 ;;
     *) echo "Неверный выбор" ;;
   esac
 done
