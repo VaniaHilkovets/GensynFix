@@ -14,7 +14,7 @@ show_menu() {
   echo -e "\n===== Меню GensynFix ====="
   echo "1) Установить ноды"
   echo "2) Логин по очереди (одна нода -> проброс -> подтверждение)"
-  echo "3) Запуск всех auto_restart.sh в tmux"
+  echo "3) Запуск всех нод в tmux"
   echo "4) Удалить всё"
   echo "5) Обновить GensynFix"
   echo "6) Выйти"
