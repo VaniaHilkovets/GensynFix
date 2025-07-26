@@ -7,7 +7,6 @@ apt install -y curl sudo tmux lsof git htop nvtop nano rsync
 
 BASE_DIR="/root"
 REPO_URL="https://github.com/VaniaHilkovets/GensynFix.git"
-COUNT=3
 LOGIN_WAIT_TIMEOUT=10
 
 show_menu() {
@@ -18,6 +17,15 @@ show_menu() {
   echo "4) Удалить всё ноды"
   echo "5) Обновить GensynFix"
   echo "6) Выйти"
+}
+
+get_current_count() {
+  COUNT=$(ls -d "$BASE_DIR"/GensynFix* 2>/dev/null | wc -l)
+  if [ "$COUNT" -eq 0 ]; then
+    echo "[!] Нет установленных нод. Установите сначала (опция 1)."
+    exit 1
+  fi
+  echo "[+] Обнаружено $COUNT нод."
 }
 
 ensure_node_version() {
@@ -73,6 +81,7 @@ run_setup() {
 
 run_login_sequential() {
   ensure_node_version
+  get_current_count
 
   for i in $(seq 1 $COUNT); do
     DIR="$BASE_DIR/GensynFix"
@@ -118,6 +127,7 @@ run_login_sequential() {
 
 run_start() {
   ensure_node_version
+  get_current_count
 
   for i in $(seq 1 $COUNT); do
     DIR="$BASE_DIR/GensynFix"
@@ -138,9 +148,9 @@ run_start() {
     CMD="cd $DIR && LOGIN_PORT=$PORT ./auto_restart.sh"
 
     if [[ $i -eq 1 ]]; then
-      tmux new-session -d -s $SESSION -n node$i "$CMD"
+      tmux new-session -d -s $SESSION -n node$i -x 800 -y 100 "$CMD"
     else
-      tmux split-window -t $SESSION "$CMD"
+      tmux split-window -t $SESSION -h "$CMD"
     fi
   done
 
@@ -150,6 +160,7 @@ run_start() {
 
 run_update() {
   ensure_node_version
+  get_current_count
 
   if [ -d "$BASE_DIR/GensynFix/.git" ]; then
     echo "[+] Обновляем основную папку GensynFix из репозитория..."
