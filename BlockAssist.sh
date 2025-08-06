@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# BlockAssist автоматический установщик
+# BlockAssist автоматический установщик с исправлениями
 # Запускать от root или с sudo
 
 # Цвета
@@ -25,7 +25,7 @@ echo -e "${YELLOW}[2/10] Проверяем базовые пакеты...${NC}"
 PACKAGES=(git curl wget build-essential software-properties-common ca-certificates 
           gnupg lsb-release make libssl-dev zlib1g-dev libbz2-dev libreadline-dev 
           libsqlite3-dev libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev 
-          libffi-dev liblzma-dev python3-openssl netcat tmux)
+          libffi-dev liblzma-dev python3-openssl netcat-openbsd tmux)
 
 NEED_INSTALL=()
 for pkg in "${PACKAGES[@]}"; do
@@ -116,27 +116,37 @@ else
     echo -e "${GREEN}✅ Python 3.10 установлен${NC}"
 fi
 
-# 8. Python библиотеки
-echo -e "${YELLOW}[8/10] Проверяем Python библиотеки...${NC}"
+# 8. Python библиотеки и виртуальное окружение
+echo -e "${YELLOW}[8/10] Настраиваем Python окружение...${NC}"
+cd /root/blockassist
+
+# Устанавливаем venv для Python
 PYTHON_BIN="$PYENV_ROOT/versions/3.10.*/bin/python"
 PIP_BIN="$PYENV_ROOT/versions/3.10.*/bin/pip"
 
-NEED_INSTALL=false
-if ! $PYTHON_BIN -c "import psutil" 2>/dev/null; then
-    NEED_INSTALL=true
-fi
-if ! $PYTHON_BIN -c "import readchar" 2>/dev/null; then
-    NEED_INSTALL=true
+# Устанавливаем virtualenv
+$PIP_BIN install --upgrade pip >/dev/null 2>&1
+$PIP_BIN install virtualenv >/dev/null 2>&1
+
+# Создаем виртуальное окружение если его нет
+if [ ! -d "blockassist-venv" ]; then
+    echo "  Создаем виртуальное окружение..."
+    $PYTHON_BIN -m venv blockassist-venv
 fi
 
-if [ "$NEED_INSTALL" = true ]; then
-    echo "  Устанавливаем библиотеки..."
-    $PIP_BIN install --upgrade pip >/dev/null 2>&1
-    $PIP_BIN install psutil readchar >/dev/null 2>&1
-    echo -e "${GREEN}✅ Библиотеки установлены${NC}"
-else
-    echo -e "${GREEN}✅ Библиотеки установлены${NC}"
+# Активируем venv и устанавливаем библиотеки
+source blockassist-venv/bin/activate
+pip install --upgrade pip >/dev/null 2>&1
+pip install psutil readchar >/dev/null 2>&1
+
+# Устанавливаем зависимости проекта если есть requirements.txt
+if [ -f "requirements.txt" ]; then
+    pip install -r requirements.txt >/dev/null 2>&1
 fi
+
+deactivate
+
+echo -e "${GREEN}✅ Python окружение настроено${NC}"
 
 # Создаем алиасы
 if [ ! -L "/usr/local/bin/python" ] || [ ! -L "/usr/local/bin/pip" ]; then
@@ -163,34 +173,88 @@ if ! grep -q "PYENV_ROOT" ~/.bashrc; then
     echo 'eval "$(pyenv init -)"' >> ~/.bashrc
     echo 'export PATH="/opt/jdk1.8.0_152/bin:$PATH"' >> ~/.bashrc
 fi
+
+# Настраиваем правильные пути для скриптов проекта
+cd /root/blockassist
+if [ -f "scripts/venv_setup.sh" ]; then
+    # Исправляем пути в venv_setup.sh
+    sed -i 's|pyenv which python|/opt/pyenv/bin/pyenv which python|g' scripts/venv_setup.sh
+    sed -i '1i export PYENV_ROOT="/opt/pyenv"' scripts/venv_setup.sh
+    sed -i '2i export PATH="$PYENV_ROOT/bin:$PATH"' scripts/venv_setup.sh
+    sed -i '3i eval "$(pyenv init -)"' scripts/venv_setup.sh
+fi
+
 echo -e "${GREEN}✅ Окружение настроено${NC}"
 
 # Создаем скрипт запуска
 cat > /root/blockassist/start.sh << 'EOF'
 #!/bin/bash
+
+# Настраиваем окружение
 export PATH="/opt/jdk1.8.0_152/bin:$PATH"
 export PYENV_ROOT="/opt/pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init -)"
+export JAVA_HOME="/opt/jdk1.8.0_152"
+
+# Переходим в директорию проекта
 cd /root/blockassist
+
+# Проверяем Java
+if ! java -version >/dev/null 2>&1; then
+    echo "❌ Java не найдена!"
+    exit 1
+fi
+
+# Проверяем Python
+if ! python --version >/dev/null 2>&1; then
+    echo "❌ Python не найден!"
+    exit 1
+fi
+
+# Активируем виртуальное окружение если есть
+if [ -d "blockassist-venv" ]; then
+    source blockassist-venv/bin/activate
+fi
+
+# Запускаем программу
+echo "Запускаем BlockAssist..."
 python run.py
 EOF
 chmod +x /root/blockassist/start.sh
+
+# Создаем алиас для быстрого запуска
+cat > /root/run_blockassist.sh << 'EOF'
+#!/bin/bash
+tmux new -s blockassist 'cd /root/blockassist && ./start.sh'
+EOF
+chmod +x /root/run_blockassist.sh
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║                   УСТАНОВКА ЗАВЕРШЕНА!                       ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${YELLOW}Для запуска BlockAssist в tmux используйте команду:${NC}"
+echo -e "${YELLOW}Для запуска BlockAssist используйте одну из команд:${NC}"
 echo ""
-echo -e "${BLUE}tmux new -s blockassist 'cd /root/blockassist && ./start.sh'${NC}"
+echo -e "${BLUE}1. Быстрый запуск в tmux:${NC}"
+echo -e "   ${GREEN}/root/run_blockassist.sh${NC}"
 echo ""
-echo -e "${YELLOW}Полезные команды tmux:${NC}"
+echo -e "${BLUE}2. Прямой запуск через tmux:${NC}"
+echo -e "   ${GREEN}tmux new -s blockassist 'cd /root/blockassist && export PATH=\"/opt/jdk1.8.0_152/bin:\$PATH\" && export PYENV_ROOT=\"/opt/pyenv\" && export PATH=\"\$PYENV_ROOT/bin:\$PATH\" && eval \"\$(pyenv init -)\" && python run.py'${NC}"
+echo ""
+echo -e "${BLUE}3. Запуск без tmux (для тестов):${NC}"
+echo -e "   ${GREEN}cd /root/blockassist && ./start.sh${NC}"
+echo ""
+echo -e "${YELLOW}Команды tmux:${NC}"
 echo "  tmux attach -t blockassist    - подключиться к сессии"
 echo "  tmux detach                   - отключиться (Ctrl+B, затем D)"
 echo "  tmux kill-session -t blockassist - остановить"
 echo ""
-echo -e "${YELLOW}Для входа в Gensyn создайте туннель в паралельном ssh окне:${NC}"
-echo -e "${BLUE}ssh -o StrictHostKeyChecking=no -R 80:localhost:3000 nokey@localhost.run{NC}"
+echo -e "${YELLOW}Для входа в Gensyn создайте туннель в параллельном SSH окне:${NC}"
+echo -e "${BLUE}ssh -o StrictHostKeyChecking=no -R 80:localhost:3000 nokey@localhost.run${NC}"
+echo ""
+echo -e "${RED}ВАЖНО: Если возникнут ошибки при запуске, выполните:${NC}"
+echo -e "${GREEN}source ~/.bashrc${NC}"
+echo -e "${GREEN}cd /root/blockassist && ./start.sh${NC}"
 echo ""
