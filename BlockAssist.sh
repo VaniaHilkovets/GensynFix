@@ -89,10 +89,22 @@ if [ -f "/opt/jdk1.8.0_152/bin/java" ]; then
     echo -e "${GREEN}✅ Java 1.8.0_152${NC}"
 else
     echo "  Устанавливаем Java..."
+    cd /root/blockassist
     chmod +x setup.sh
     ./setup.sh >/dev/null 2>&1
+    
+    # Проверяем что Java установилась
+    if [ ! -f "/opt/jdk1.8.0_152/bin/java" ]; then
+        echo -e "${RED}❌ Ошибка установки Java. Пробуем еще раз...${NC}"
+        ./setup.sh
+    fi
+    
     echo -e "${GREEN}✅ Java установлена${NC}"
 fi
+
+# Добавляем Java в PATH сразу
+export PATH="/opt/jdk1.8.0_152/bin:$PATH"
+export JAVA_HOME="/opt/jdk1.8.0_152"
 
 # 7. Проверяем Python
 echo -e "${YELLOW}[7/10] Проверяем Python 3.10...${NC}"
@@ -167,10 +179,25 @@ fi
 
 # 10. Добавляем в bashrc
 echo -e "${YELLOW}[10/10] Настраиваем окружение...${NC}"
+
+# Создаем профиль для BlockAssist
+cat > /etc/profile.d/blockassist.sh << 'EOF'
+export JAVA_HOME="/opt/jdk1.8.0_152"
+export PATH="/opt/jdk1.8.0_152/bin:$PATH"
+export PYENV_ROOT="/opt/pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+if [ -f "$PYENV_ROOT/bin/pyenv" ]; then
+    eval "$(pyenv init -)"
+fi
+EOF
+chmod +x /etc/profile.d/blockassist.sh
+
+# Добавляем в bashrc если еще нет
 if ! grep -q "PYENV_ROOT" ~/.bashrc; then
     echo 'export PYENV_ROOT="/opt/pyenv"' >> ~/.bashrc
     echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
     echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+    echo 'export JAVA_HOME="/opt/jdk1.8.0_152"' >> ~/.bashrc
     echo 'export PATH="/opt/jdk1.8.0_152/bin:$PATH"' >> ~/.bashrc
 fi
 
@@ -191,31 +218,55 @@ cat > /root/blockassist/start.sh << 'EOF'
 #!/bin/bash
 
 # Настраиваем окружение
+export JAVA_HOME="/opt/jdk1.8.0_152"
 export PATH="/opt/jdk1.8.0_152/bin:$PATH"
 export PYENV_ROOT="/opt/pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
-export JAVA_HOME="/opt/jdk1.8.0_152"
+
+# Инициализируем pyenv
+if [ -f "$PYENV_ROOT/bin/pyenv" ]; then
+    eval "$(pyenv init -)"
+fi
 
 # Переходим в директорию проекта
 cd /root/blockassist
 
-# Проверяем Java
-if ! java -version >/dev/null 2>&1; then
-    echo "❌ Java не найдена!"
+# Проверяем Java с полным путем
+if [ ! -f "/opt/jdk1.8.0_152/bin/java" ]; then
+    echo "❌ Java не найдена в /opt/jdk1.8.0_152/bin/java"
+    echo "Попробуйте установить Java вручную:"
+    echo "cd /root/blockassist && ./setup.sh"
+    exit 1
+fi
+
+# Проверяем что Java работает
+if ! /opt/jdk1.8.0_152/bin/java -version >/dev/null 2>&1; then
+    echo "❌ Java установлена но не работает!"
     exit 1
 fi
 
 # Проверяем Python
-if ! python --version >/dev/null 2>&1; then
-    echo "❌ Python не найден!"
-    exit 1
+if ! command -v python >/dev/null 2>&1; then
+    # Пробуем использовать python из pyenv напрямую
+    if [ -f "$PYENV_ROOT/versions/3.10.*/bin/python" ]; then
+        export PATH="$PYENV_ROOT/versions/3.10.*/bin:$PATH"
+    else
+        echo "❌ Python не найден!"
+        exit 1
+    fi
 fi
 
 # Активируем виртуальное окружение если есть
 if [ -d "blockassist-venv" ]; then
     source blockassist-venv/bin/activate
 fi
+
+# Выводим версии для отладки
+echo "Java версия: $(/opt/jdk1.8.0_152/bin/java -version 2>&1 | head -1)"
+echo "Python версия: $(python --version)"
+echo "Путь к Java: $(which java)"
+echo "Путь к Python: $(which python)"
+echo ""
 
 # Запускаем программу
 echo "Запускаем BlockAssist..."
@@ -240,10 +291,7 @@ echo ""
 echo -e "${BLUE}1. Быстрый запуск в tmux:${NC}"
 echo -e "   ${GREEN}/root/run_blockassist.sh${NC}"
 echo ""
-echo -e "${BLUE}2. Прямой запуск через tmux:${NC}"
-echo -e "   ${GREEN}tmux new -s blockassist 'cd /root/blockassist && export PATH=\"/opt/jdk1.8.0_152/bin:\$PATH\" && export PYENV_ROOT=\"/opt/pyenv\" && export PATH=\"\$PYENV_ROOT/bin:\$PATH\" && eval \"\$(pyenv init -)\" && python run.py'${NC}"
-echo ""
-echo -e "${BLUE}3. Запуск без tmux (для тестов):${NC}"
+echo -e "${BLUE}. Запуск без tmux (для тестов):${NC}"
 echo -e "   ${GREEN}cd /root/blockassist && ./start.sh${NC}"
 echo ""
 echo -e "${YELLOW}Команды tmux:${NC}"
