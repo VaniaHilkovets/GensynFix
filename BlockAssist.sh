@@ -192,5 +192,5 @@ echo "  tmux detach                   - отключиться (Ctrl+B, зате
 echo "  tmux kill-session -t blockassist - остановить"
 echo ""
 echo -e "${YELLOW}Для входа в Gensyn создайте туннель в паралельном ssh окне:${NC}"
-echo -e "${BLUE}ssh -R 80:localhost:3000 nokey@localhost.run${NC}"
+echo -e "${BLUE}ssh -o StrictHostKeyChecking=no -R 80:localhost:3000 nokey@localhost.run{NC}"
 echo ""
