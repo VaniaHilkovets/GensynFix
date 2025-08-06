@@ -43,10 +43,10 @@ echo -e "${GREEN}✅ Базовые пакеты установлены${NC}"
 # 3. Проверяем Node.js
 echo -e "${YELLOW}[3/10] Проверяем Node.js...${NC}"
 NODE_VERSION=$(node --version 2>/dev/null || echo "")
-if [[ "$NODE_VERSION" =~ v1[8-9]\.|v2[0-9]\. ]]; then
+if [[ "$NODE_VERSION" =~ v2[0-9]\. ]]; then
     echo -e "${GREEN}✅ Node.js $NODE_VERSION${NC}"
 else
-    echo "  Устанавливаем Node.js 18..."
+    echo "  Устанавливаем Node.js 20..."
     # Удаляем старую версию если есть
     if [ ! -z "$NODE_VERSION" ]; then
         apt remove -y nodejs npm >/dev/null 2>&1
@@ -55,7 +55,7 @@ else
         rm -rf /usr/local/lib/node_modules
         rm -f /etc/apt/sources.list.d/nodesource.list*
     fi
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - >/dev/null 2>&1
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1
     apt install -y nodejs >/dev/null 2>&1
     echo -e "${GREEN}✅ Node.js $(node --version) установлен${NC}"
 fi
@@ -191,6 +191,6 @@ echo "  tmux attach -t blockassist    - подключиться к сессии
 echo "  tmux detach                   - отключиться (Ctrl+B, затем D)"
 echo "  tmux kill-session -t blockassist - остановить"
 echo ""
-echo -e "${YELLOW}Для входа в Gensyn создайте туннель:${NC}"
+echo -e "${YELLOW}Для входа в Gensyn создайте туннель в паралельном ssh окне:${NC}"
 echo -e "${BLUE}ssh -R 80:localhost:3000 nokey@localhost.run${NC}"
 echo ""
