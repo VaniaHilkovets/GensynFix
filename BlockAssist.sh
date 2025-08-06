@@ -85,6 +85,7 @@ fi
 
 # 6. Проверяем Java
 echo -e "${YELLOW}[6/10] Проверяем Java...${NC}"
+# Проверяем стандартный путь
 if [ -f "/opt/jdk1.8.0_152/bin/java" ]; then
     echo -e "${GREEN}✅ Java 1.8.0_152${NC}"
 else
@@ -93,13 +94,23 @@ else
     chmod +x setup.sh
     ./setup.sh >/dev/null 2>&1
     
-    # Проверяем что Java установилась
-    if [ ! -f "/opt/jdk1.8.0_152/bin/java" ]; then
+    # Ищем где установилась Java (может быть Zulu)
+    JAVA_INSTALL_PATH=$(find /opt -name "java" -type f | grep "bin/java" | grep -E "(jdk|zulu)" | head -1)
+    
+    if [ ! -z "$JAVA_INSTALL_PATH" ]; then
+        JAVA_HOME_PATH=$(dirname $(dirname "$JAVA_INSTALL_PATH"))
+        echo "  Java найдена в: $JAVA_HOME_PATH"
+        
+        # Создаем символическую ссылку на стандартный путь
+        if [ ! -L "/opt/jdk1.8.0_152" ]; then
+            echo "  Создаем символическую ссылку..."
+            ln -s "$JAVA_HOME_PATH" /opt/jdk1.8.0_152
+        fi
+        echo -e "${GREEN}✅ Java установлена${NC}"
+    else
         echo -e "${RED}❌ Ошибка установки Java. Пробуем еще раз...${NC}"
         ./setup.sh
     fi
-    
-    echo -e "${GREEN}✅ Java установлена${NC}"
 fi
 
 # Добавляем Java в PATH сразу
@@ -291,7 +302,10 @@ echo ""
 echo -e "${BLUE}1. Быстрый запуск в tmux:${NC}"
 echo -e "   ${GREEN}/root/run_blockassist.sh${NC}"
 echo ""
-echo -e "${BLUE}. Запуск без tmux (для тестов):${NC}"
+echo -e "${BLUE}2. Прямой запуск через tmux:${NC}"
+echo -e "   ${GREEN}tmux new -s blockassist 'cd /root/blockassist && export PATH=\"/opt/jdk1.8.0_152/bin:\$PATH\" && export PYENV_ROOT=\"/opt/pyenv\" && export PATH=\"\$PYENV_ROOT/bin:\$PATH\" && eval \"\$(pyenv init -)\" && python run.py'${NC}"
+echo ""
+echo -e "${BLUE}3. Запуск без tmux (для тестов):${NC}"
 echo -e "   ${GREEN}cd /root/blockassist && ./start.sh${NC}"
 echo ""
 echo -e "${YELLOW}Команды tmux:${NC}"
