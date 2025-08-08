@@ -24,10 +24,10 @@ fi
 echo "[*] Обновление пакетов..."
 apt update -y || { echo "Ошибка: Не удалось обновить пакеты."; exit 1; }
 
-echo "[*] Установка зависимостей для Python..."
+echo "[*] Установка зависимостей для Python и браузера..."
 apt install -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
 libsqlite3-dev curl git libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
-libffi-dev liblzma-dev python3-pip || { echo "Ошибка: Не удалось установить зависимости."; exit 1; }
+libffi-dev liblzma-dev python3-pip firefox || { echo "Ошибка: Не удалось установить зависимости."; exit 1; }
 
 echo "[*] Клонирование BlockAssist..."
 cd /root
@@ -97,6 +97,18 @@ if ! pip install psutil readchar; then
     echo "Ошибка: Не удалось установить пакеты psutil и readchar."
     exit 1
 fi
+
+echo "[*] Создание ярлыка Firefox на рабочем столе..."
+mkdir -p /root/Desktop
+cat > /root/Desktop/firefox.desktop <<'EOL'
+[Desktop Entry]
+Name=Firefox
+Exec=firefox %U
+Type=Application
+Icon=firefox
+Terminal=false
+EOL
+chmod +x /root/Desktop/firefox.desktop
 
 echo "[*] Запуск BlockAssist..."
 if [ -f "run.py" ]; then
