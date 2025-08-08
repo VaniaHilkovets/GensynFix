@@ -66,17 +66,6 @@ pyenv exec pip install --upgrade pip
 pyenv exec pip install psutil readchar
 
 echo -e "\n========================================="
-echo "Встановлення завершено!"
+echo "Установка завершена!"
 echo "========================================="
-echo ""
-echo "Для запуску BlockAssist використовуйте:"
-echo "  cd $(pwd)"
-echo "  python run.py"
-echo ""
-echo "Для моніторингу логів:"
-echo "  ls logs"
-echo "  tail -f logs/<name>.log"
-echo ""
-echo "ВАЖЛИВО: Перезапустіть термінал або виконайте:"
-echo "  source ~/.bashrc"
 echo ""
