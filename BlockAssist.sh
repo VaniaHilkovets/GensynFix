@@ -1,124 +1,141 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-# Логирование ошибок
+# ===== Логирование ошибок =====
 exec 2> /root/blockassist_setup_error.log
+export DEBIAN_FRONTEND=noninteractive
 
-# Проверка, что система использует apt
+echo "[*] Проверки..."
 if ! command -v apt >/dev/null 2>&1; then
-    echo "Ошибка: Скрипт предназначен для Debian/Ubuntu с apt."
-    exit 1
+  echo "Ошибка: Нужен Debian/Ubuntu с apt."; exit 1
 fi
-
-# Проверка прав root
 if [ "$(id -u)" -ne 0 ]; then
-    echo "Ошибка: Запустите скрипт от имени root."
-    exit 1
+  echo "Ошибка: запустите от root."; exit 1
 fi
-
-# Проверка VNC
-if [ -z "$DISPLAY" ]; then
-    echo "Предупреждение: Переменная DISPLAY не установлена. Убедитесь, что вы в VNC."
+if [ -z "${DISPLAY:-}" ]; then
+  echo "Предупреждение: DISPLAY не установлен. Убедитесь, что вы в VNC."
 fi
 
 echo "[*] Обновление пакетов..."
-apt update -y || { echo "Ошибка: Не удалось обновить пакеты."; exit 1; }
+apt update -y
 
-echo "[*] Установка зависимостей для Python и браузера..."
-apt install -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
-libsqlite3-dev curl git libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
-libffi-dev liblzma-dev python3-pip firefox || { echo "Ошибка: Не удалось установить зависимости."; exit 1; }
+echo "[*] Базовые зависимости..."
+apt install -y \
+  make build-essential gcc g++ \
+  libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev \
+  curl git ca-certificates gnupg \
+  libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
+  libffi-dev liblzma-dev python3 python3-venv python3-pip \
+  unzip zip rsync pkg-config
 
+# ===== Chromium (не Firefox) =====
+echo "[*] Установка Chromium..."
+if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1; then
+  apt install -y snapd || true
+  if command -v snap >/dev/null 2>&1; then
+    snap install chromium
+  else
+    # резервный вариант (иногда тянет snap-транзит пакет)
+    apt install -y chromium-browser || apt install -y chromium || true
+  fi
+fi
+
+# ===== SWAP, если отсутствует =====
+if ! swapon --noheadings | grep -q . ; then
+  echo "[*] Создание swap 8G..."
+  fallocate -l 8G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
+# ===== Node.js 20 через NVM (до любых yarn/npm шагов!) =====
+echo "[*] Установка NVM и Node.js 20..."
+export NVM_DIR="/root/.nvm"
+if [ ! -d "$NVM_DIR" ]; then
+  curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+fi
+# shellcheck disable=SC1090
+. "$NVM_DIR/nvm.sh"
+nvm install 20
+nvm alias default 20
+nvm use 20
+
+# Yarn через corepack (рекомендовано для Node >=16)
+echo "[*] Активация corepack/yarn..."
+corepack enable || npm i -g yarn
+yarn -v || true
+
+# Чуть больше хипа для больших сборок
+export NODE_OPTIONS="--max-old-space-size=4096"
+
+# ===== BlockAssist =====
 echo "[*] Клонирование BlockAssist..."
 cd /root
-if [ -d "blockassist" ]; then
-    echo "[*] Директория blockassist уже существует. Удалить? (y/n)"
-    read -r response
-    if [[ "$response" == "y" ]]; then
-        rm -rf blockassist
-    else
-        echo "Скрипт остановлен."
-        exit 1
-    fi
-fi
-if ! git clone https://github.com/gensyn-ai/blockassist.git; then
-    echo "Ошибка: Не удалось клонировать репозиторий."
-    exit 1
-fi
+rm -rf blockassist
+git clone https://github.com/gensyn-ai/blockassist.git
 cd blockassist
 
+# На случай если setup.sh внутри дергает node/yarn — уже под NVM:
+export PATH="$NVM_DIR/versions/node/$(nvm current)/bin:$PATH"
+
 echo "[*] Запуск setup.sh (Java + Malmo)..."
-if [ -f "setup.sh" ]; then
-    chmod +x setup.sh
-    if ! ./setup.sh; then
-        echo "Ошибка: Не удалось выполнить setup.sh. Проверьте /root/blockassist_setup_error.log."
-        exit 1
-    fi
+if [ -f "./setup.sh" ]; then
+  chmod +x ./setup.sh
+  ./setup.sh
 else
-    echo "Ошибка: Файл setup.sh не найден."
-    exit 1
+  echo "Ошибка: setup.sh не найден"; exit 1
 fi
 
+# ===== pyenv + Python 3.10.12 =====
 echo "[*] Установка pyenv..."
-if [ -d "/root/.pyenv" ]; then
-    echo "[*] Директория /root/.pyenv существует. Удаляю для переустановки..."
-    rm -rf /root/.pyenv
-fi
-if ! command -v pyenv >/dev/null 2>&1; then
-    if ! curl -fsSL https://pyenv.run | bash; then
-        echo "Ошибка: Не удалось установить pyenv."
-        exit 1
-    fi
-else
-    echo "[*] pyenv уже установлен, пропускаем..."
-fi
+rm -rf /root/.pyenv
+curl -fsSL https://pyenv.run | bash
 
-# Настройка pyenv
+# shellcheck disable=SC2016
 if ! grep -q 'pyenv init' /root/.bashrc; then
-    cat >> /root/.bashrc <<'EOL'
+  cat >> /root/.bashrc <<'EOL'
 export PATH="/root/.pyenv/bin:$PATH"
 eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
 EOL
 fi
+
 export PATH="/root/.pyenv/bin:$PATH"
 eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
 
-echo "[*] Установка Python 3.10.12..."
-if ! pyenv install -s 3.10.12; then
-    echo "Ошибка: Не удалось установить Python 3.10.12."
-    exit 1
-fi
+echo "[*] Установка Python 3.10.12 через pyenv..."
+pyenv install -s 3.10.12
 pyenv global 3.10.12
 
-echo "[*] Установка Python-пакетов..."
-if ! pip install --upgrade pip; then
-    echo "Ошибка: Не удалось обновить pip."
-    exit 1
-fi
-if ! pip install psutil readchar; then
-    echo "Ошибка: Не удалось установить пакеты psutil и readchar."
-    exit 1
-fi
+echo "[*] Обновление pip и базовые пакеты..."
+pip install --upgrade pip
+pip install psutil readchar
 
-echo "[*] Создание ярлыка Firefox на рабочем столе..."
+# ===== Ярлык Chromium на рабочем столе =====
+echo "[*] Создание ярлыка Chromium..."
 mkdir -p /root/Desktop
-cat > /root/Desktop/firefox.desktop <<'EOL'
+CHROME_BIN="chromium"
+command -v chromium-browser >/dev/null 2>&1 && CHROME_BIN="chromium-browser"
+cat > /root/Desktop/chromium.desktop <<EOL
 [Desktop Entry]
-Name=Firefox
-Exec=firefox %U
+Name=Chromium
+Exec=${CHROME_BIN} %U
 Type=Application
-Icon=firefox
+Icon=chromium
 Terminal=false
 EOL
-chmod +x /root/Desktop/firefox.desktop
+chmod +x /root/Desktop/chromium.desktop || true
 
+# ===== Запуск BlockAssist =====
 echo "[*] Запуск BlockAssist..."
 if [ -f "run.py" ]; then
-    echo "Запускаем run.py. Если зависнет, нажмите ENTER несколько раз."
-    python run.py
+  echo "Запускаем run.py. Если зависнет — нажмите ENTER пару раз в консоли."
+  python run.py
 else
-    echo "Ошибка: Файл run.py не найден."
-    exit 1
+  echo "Ошибка: run.py не найден"; exit 1
 fi
+
+echo "[✓] Готово."
