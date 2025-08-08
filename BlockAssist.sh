@@ -1,53 +1,91 @@
 #!/bin/bash
 set -e
 
-echo "[*] Adding TurboVNC & VirtualGL GPG keys..."
-curl -fsSL https://packagecloud.io/dcommander/turbovnc/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/turbovnc.gpg
-curl -fsSL https://packagecloud.io/dcommander/virtualgl/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/virtualgl.gpg
+# Логирование ошибок в файл
+exec 2> setup_error.log
 
-echo "[*] Adding repos..."
-echo "deb [signed-by=/usr/share/keyrings/turbovnc.gpg] https://packagecloud.io/dcommander/turbovnc/any any main" | sudo tee /etc/apt/sources.list.d/turbovnc.list
-echo "deb [signed-by=/usr/share/keyrings/virtualgl.gpg] https://packagecloud.io/dcommander/virtualgl/any any main" | sudo tee /etc/apt/sources.list.d/virtualgl.list
+# Проверка, что система использует apt (Debian/Ubuntu)
+if ! command -v apt >/dev/null 2>&1; then
+    echo "Ошибка: Этот скрипт предназначен для систем на базе Debian/Ubuntu с apt."
+    exit 1
+fi
 
+# Проверка прав sudo
+if ! sudo -n true 2>/dev/null; then
+    echo "Ошибка: Требуются права sudo."
+    exit 1
+fi
+
+# Проверка, что мы в VNC-окружении (для уверенности)
+if [ -z "$DISPLAY" ]; then
+    echo "Предупреждение: Переменная DISPLAY не установлена. Убедитесь, что вы в VNC-сессии."
+fi
+
+echo "[*] Обновление списка пакетов..."
 sudo apt update
 
-echo "[*] Installing dependencies..."
-sudo apt install -y virtualgl turbovnc libegl1-mesa make build-essential libssl-dev \
-zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev curl git libncursesw5-dev \
-xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev python3-pip
+echo "[*] Установка зависимостей для Python..."
+sudo apt install -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
+libsqlite3-dev curl git libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
+libffi-dev liblzma-dev python3-pip
 
-echo "[*] Cloning BlockAssist..."
+echo "[*] Клонирование BlockAssist..."
 cd ~
-rm -rf blockassist
+if [ -d "blockassist" ]; then
+    echo "[*] Директория blockassist уже существует. Удалить? (y/n)"
+    read -r response
+    if [[ "$response" == "y" ]]; then
+        rm -rf blockassist
+    else
+        echo "Скрипт остановлен."
+        exit 1
+    fi
+fi
 git clone https://github.com/gensyn-ai/blockassist.git
 cd blockassist
 
-echo "[*] Running setup.sh (Java + Malmo)..."
-chmod +x setup.sh
-./setup.sh
+echo "[*] Запуск setup.sh (Java + Malmo)..."
+if [ -f "setup.sh" ]; then
+    chmod +x setup.sh
+    ./setup.sh
+else
+    echo "Ошибка: Файл setup.sh не найден."
+    exit 1
+fi
 
-echo "[*] Installing pyenv..."
-curl -fsSL https://pyenv.run | bash
+echo "[*] Установка pyenv..."
+if ! command -v pyenv >/dev/null 2>&1; then
+    curl -fsSL https://pyenv.run | bash
+else
+    echo "[*] pyenv уже установлен, пропускаем..."
+fi
 
+# Добавление pyenv в .bashrc, если еще не добавлено
 if ! grep -q 'pyenv init' ~/.bashrc; then
-  cat >> ~/.bashrc <<'EOL'
+    cat >> ~/.bashrc <<'EOL'
 export PATH="$HOME/.pyenv/bin:$PATH"
 eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
 EOL
 fi
 
+# Применение изменений в текущей сессии
 export PATH="$HOME/.pyenv/bin:$PATH"
 eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
 
-echo "[*] Installing Python 3.10..."
-pyenv install -s 3.10
-pyenv global 3.10
+echo "[*] Установка Python 3.10..."
+pyenv install -s 3.10.12
+pyenv global 3.10.12
 
-echo "[*] Installing Python packages..."
+echo "[*] Установка Python-пакетов..."
 pip install --upgrade pip
 pip install psutil readchar
 
-echo "[*] Starting BlockAssist..."
-pyenv exec python run.py
+echo "[*] Запуск BlockAssist..."
+if [ -f "run.py" ]; then
+    python run.py
+else
+    echo "Ошибка: Файл run.py не найден."
+    exit 1
+fi
