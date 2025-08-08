@@ -10,27 +10,27 @@ if ! command -v apt >/dev/null 2>&1; then
     exit 1
 fi
 
-# Проверка прав sudo
-if ! sudo -n true 2>/dev/null; then
-    echo "Ошибка: Требуются права sudo."
+# Проверка прав root (так как вы работаете от root)
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Ошибка: Скрипт должен запускаться от имени root."
     exit 1
 fi
 
-# Проверка, что мы в VNC-окружении (для уверенности)
+# Проверка VNC-окружения (для уверенности)
 if [ -z "$DISPLAY" ]; then
     echo "Предупреждение: Переменная DISPLAY не установлена. Убедитесь, что вы в VNC-сессии."
 fi
 
 echo "[*] Обновление списка пакетов..."
-sudo apt update
+apt update
 
 echo "[*] Установка зависимостей для Python..."
-sudo apt install -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
+apt install -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
 libsqlite3-dev curl git libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
 libffi-dev liblzma-dev python3-pip
 
 echo "[*] Клонирование BlockAssist..."
-cd ~
+cd /root
 if [ -d "blockassist" ]; then
     echo "[*] Директория blockassist уже существует. Удалить? (y/n)"
     read -r response
@@ -61,16 +61,16 @@ else
 fi
 
 # Добавление pyenv в .bashrc, если еще не добавлено
-if ! grep -q 'pyenv init' ~/.bashrc; then
-    cat >> ~/.bashrc <<'EOL'
-export PATH="$HOME/.pyenv/bin:$PATH"
+if ! grep -q 'pyenv init' /root/.bashrc; then
+    cat >> /root/.bashrc <<'EOL'
+export PATH="/root/.pyenv/bin:$PATH"
 eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
 EOL
 fi
 
 # Применение изменений в текущей сессии
-export PATH="$HOME/.pyenv/bin:$PATH"
+export PATH="/root/.pyenv/bin:$PATH"
 eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
 
