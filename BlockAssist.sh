@@ -1,28 +1,28 @@
 #!/bin/bash
 set -e
 
-# Логирование ошибок в файл
+# Логирование ошибок
 exec 2> /root/blockassist_setup_error.log
 
-# Проверка, что система использует apt (Debian/Ubuntu)
+# Проверка, что система использует apt
 if ! command -v apt >/dev/null 2>&1; then
-    echo "Ошибка: Этот скрипт предназначен для систем на базе Debian/Ubuntu с apt."
+    echo "Ошибка: Скрипт предназначен для Debian/Ubuntu с apt."
     exit 1
 fi
 
 # Проверка прав root
 if [ "$(id -u)" -ne 0 ]; then
-    echo "Ошибка: Скрипт должен запускаться от имени root."
+    echo "Ошибка: Запустите скрипт от имени root."
     exit 1
 fi
 
-# Проверка VNC-окружения
+# Проверка VNC
 if [ -z "$DISPLAY" ]; then
-    echo "Предупреждение: Переменная DISPLAY не установлена. Убедитесь, что вы в VNC-сессии."
+    echo "Предупреждение: Переменная DISPLAY не установлена. Убедитесь, что вы в VNC."
 fi
 
-echo "[*] Обновление списка пакетов..."
-apt update -y || { echo "Ошибка: Не удалось обновить список пакетов."; exit 1; }
+echo "[*] Обновление пакетов..."
+apt update -y || { echo "Ошибка: Не удалось обновить пакеты."; exit 1; }
 
 echo "[*] Установка зависимостей для Python..."
 apt install -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
@@ -42,7 +42,7 @@ if [ -d "blockassist" ]; then
     fi
 fi
 if ! git clone https://github.com/gensyn-ai/blockassist.git; then
-    echo "Ошибка: Не удалось клонировать репозиторий BlockAssist."
+    echo "Ошибка: Не удалось клонировать репозиторий."
     exit 1
 fi
 cd blockassist
@@ -69,7 +69,7 @@ else
     echo "[*] pyenv уже установлен, пропускаем..."
 fi
 
-# Добавление pyenv в .bashrc, если еще не добавлено
+# Настройка pyenv
 if ! grep -q 'pyenv init' /root/.bashrc; then
     cat >> /root/.bashrc <<'EOL'
 export PATH="/root/.pyenv/bin:$PATH"
@@ -77,8 +77,6 @@ eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
 EOL
 fi
-
-# Применение изменений в текущей сессии
 export PATH="/root/.pyenv/bin:$PATH"
 eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
@@ -96,13 +94,13 @@ if ! pip install --upgrade pip; then
     exit 1
 fi
 if ! pip install psutil readchar; then
-    echo "Ошибка: Не удалось установить Python-пакеты."
+    echo "Ошибка: Не удалось установить пакеты psutil и readchar."
     exit 1
 fi
 
 echo "[*] Запуск BlockAssist..."
 if [ -f "run.py" ]; then
-    echo "Запускаем run.py. Если зависнет, попробуйте нажать ENTER несколько раз."
+    echo "Запускаем run.py. Если зависнет, нажмите ENTER несколько раз."
     python run.py
 else
     echo "Ошибка: Файл run.py не найден."
