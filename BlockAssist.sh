@@ -60,6 +60,10 @@ else
 fi
 
 echo "[*] Установка pyenv..."
+if [ -d "/root/.pyenv" ]; then
+    echo "[*] Директория /root/.pyenv существует. Удаляю для переустановки..."
+    rm -rf /root/.pyenv
+fi
 if ! command -v pyenv >/dev/null 2>&1; then
     if ! curl -fsSL https://pyenv.run | bash; then
         echo "Ошибка: Не удалось установить pyenv."
