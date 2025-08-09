@@ -1,86 +1,104 @@
 #!/bin/bash
-# BlockAssist Simple Installer Script
+# BlockAssist Official Installer + Firefox
 set -e
 
 echo "========================================="
-echo "BlockAssist Installer"
+echo "BlockAssist Installer (Official + Firefox)"
 echo "========================================="
 
-# Крок 1: Системні залежності та браузер
-echo -e "\n[1/5] Встановлення системних залежностей та браузера..."
-sudo apt update
-sudo apt install -y make build-essential libssl-dev zlib1g-dev \
-   libbz2-dev libreadline-dev libsqlite3-dev curl git \
-   libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
-   libffi-dev liblzma-dev chromium-browser
-
-# Крок 2: Клонування і запуск setup.sh
-echo -e "\n[2/5] Клонування репозиторію..."
+# Step 1: Clone repo
+echo -e "\n[Step 1] Cloning repository..."
 cd ~
+if [ -d "blockassist" ]; then
+    rm -rf blockassist
+fi
 git clone https://github.com/gensyn-ai/blockassist.git
 cd blockassist
 PROJECT_DIR=$(pwd)
 
-echo -e "\n[3/5] Запуск офіційного скрипта установки..."
+# Step 2: Install Java
+echo -e "\n[Step 2] Installing Java..."
 chmod +x setup.sh
 ./setup.sh
 
-# Крок 4: Встановлення pyenv і Python
-echo -e "\n[4/5] Встановлення Python через pyenv..."
-if ! command -v pyenv &> /dev/null; then
-   curl -fsSL https://pyenv.run | bash
-   echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
-   echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
-   echo 'eval "$(pyenv init -)"' >> ~/.bashrc
-   
-   export PYENV_ROOT="$HOME/.pyenv"
-   export PATH="$PYENV_ROOT/bin:$PATH"
-   eval "$(pyenv init -)"
+# Step 3: Install pyenv
+echo -e "\n[Step 3] Installing pyenv..."
+if [ -d "$HOME/.pyenv" ]; then
+    rm -rf "$HOME/.pyenv"
 fi
+curl -fsSL https://pyenv.run | bash
 
+# Add to bashrc
+echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+
+# Activate pyenv for current session
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+
+# Step 4: Install Python 3.10
+echo -e "\n[Step 4] Installing Python 3.10..."
+sudo apt update
+sudo apt install -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev curl git libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
 pyenv install 3.10
-pyenv local 3.10
+pyenv global 3.10
+
+# Step 5: Install psutil and readchar
+echo -e "\n[Step 5] Installing Python packages..."
 pip install psutil readchar
 
-# Крок 5: Створення ярлика на робочому столі
-echo -e "\n[5/5] Створення ярлика на робочому столі..."
+# Install Firefox
+echo -e "\n[Extra] Installing Firefox..."
+sudo apt install -y firefox
+
+# Create Firefox desktop shortcut
+echo -e "\nCreating Firefox shortcut on desktop..."
 DESKTOP_DIR="$HOME/Desktop"
 if [ ! -d "$DESKTOP_DIR" ]; then
-   DESKTOP_DIR="$HOME/Рабочий стол"
+    DESKTOP_DIR="$HOME/Рабочий стол"
 fi
 if [ ! -d "$DESKTOP_DIR" ]; then
-   mkdir -p "$DESKTOP_DIR"
+    mkdir -p "$DESKTOP_DIR"
 fi
 
-cat > "$DESKTOP_DIR/BlockAssist.desktop" << EOF
+cat > "$DESKTOP_DIR/Firefox.desktop" << EOF
 [Desktop Entry]
 Version=1.0
-Type=Application
-Name=BlockAssist
-Comment=Run BlockAssist
-Icon=$PROJECT_DIR/splash.png
-Exec=gnome-terminal --working-directory=$PROJECT_DIR -- bash -c "pyenv local 3.10 && python run.py; read -p 'Press Enter to close...'"
+Name=Firefox Web Browser
+Comment=Browse the World Wide Web
+GenericName=Web Browser
+Keywords=Internet;WWW;Browser;Web;Explorer
+Exec=firefox %u
 Terminal=false
-Categories=Application;Development;
+X-MultipleArgs=false
+Type=Application
+Icon=firefox
+Categories=GNOME;GTK;Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;application/xml;application/rss+xml;application/rdf+xml;image/gif;image/jpeg;image/png;x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/ftp;x-scheme-handler/chrome;video/webm;application/x-xpinstall;
+StartupNotify=true
 EOF
 
-# Робимо ярлик виконуваним
-chmod +x "$DESKTOP_DIR/BlockAssist.desktop"
+chmod +x "$DESKTOP_DIR/Firefox.desktop"
 
-# Якщо це Ubuntu з GNOME, дозволяємо запуск
+# Make it trusted on GNOME
 if command -v gio &> /dev/null; then
-   gio set "$DESKTOP_DIR/BlockAssist.desktop" metadata::trusted true
+    gio set "$DESKTOP_DIR/Firefox.desktop" metadata::trusted true 2>/dev/null || true
 fi
 
 echo -e "\n========================================="
-echo "Установка завершена!"
+echo "Installation complete!"
 echo ""
-echo "✅ Встановлено:"
-echo "  - Chromium Browser"
-echo "  - BlockAssist та всі залежності"
-echo "  - Ярлик на робочому столі"
+echo "✅ Installed:"
+echo "  - BlockAssist and all dependencies"
+echo "  - Firefox browser"
+echo "  - Firefox shortcut on desktop"
 echo ""
-echo "Для запуску:"
-echo "  - Двічі клікніть на ярлик BlockAssist на робочому столі"
-echo "  - Або виконайте: cd $PROJECT_DIR && python run.py"
+echo "To run BlockAssist:"
+echo "  cd $PROJECT_DIR"
+echo "  python run.py"
+echo ""
+echo "Note: You may need to restart your terminal or run:"
+echo "  source ~/.bashrc"
 echo "========================================="
