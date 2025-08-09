@@ -1,7 +1,6 @@
 #!/bin/bash
 # BlockAssist Official Installer
 set -e
-
 echo "========================================="
 echo "BlockAssist Installer"
 echo "========================================="
@@ -45,6 +44,17 @@ cd blockassist
 echo -e "\n[2/5] Install Java 1.8.0_152..."
 ./setup.sh
 
+# ВАЖНО: Активируем Java сразу после установки
+export JAVA_PATH=/opt/zulu8.25.0.1-jdk8.0.152-linux_x64
+export PATH=$JAVA_PATH/bin:$PATH
+
+# Проверяем установку Java
+if ! command -v java &> /dev/null; then
+    echo "ОШИБКА: Java не найдена после установки!"
+    exit 1
+fi
+echo "Java установлена: $(java -version 2>&1 | head -n 1)"
+
 # Step 3: Install pyenv
 echo -e "\n[3/5] Install pyenv..."
 if [ -d "$HOME/.pyenv" ]; then
@@ -59,6 +69,12 @@ if ! grep -q 'export PYENV_ROOT="$HOME/.pyenv"' ~/.bashrc; then
     echo 'eval "$(pyenv init -)"' >> ~/.bashrc
 fi
 
+# Добавляем Java в bashrc ЕСЛИ ЕЩЕ НЕТ
+if ! grep -q 'export JAVA_PATH=/opt/zulu8.25.0.1-jdk8.0.152-linux_x64' ~/.bashrc; then
+    echo 'export JAVA_PATH=/opt/zulu8.25.0.1-jdk8.0.152-linux_x64' >> ~/.bashrc
+    echo 'export PATH=$JAVA_PATH/bin:$PATH' >> ~/.bashrc
+fi
+
 # Активируем pyenv для текущей сессии
 export PYENV_ROOT="$HOME/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
@@ -68,7 +84,14 @@ eval "$(pyenv init -)"
 echo -e "\n[4/5] Install Python 3.10..."
 sudo apt update
 sudo apt install -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev curl git libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
-pyenv install 3.10
+
+# Проверяем, установлен ли уже Python 3.10
+if pyenv versions | grep -q "3.10"; then
+    echo "Python 3.10 уже установлен"
+else
+    pyenv install 3.10
+fi
+
 pyenv global 3.10
 
 # Активируем Python 3.10
@@ -81,15 +104,25 @@ echo -e "\n[5/5] Install psutil and readchar..."
 echo -e "\n========================================="
 echo "Установка завершена!"
 echo ""
-echo "ВАЖНО: Выполните эту команду для активации pyenv:"
-echo "  source ~/.bashrc"
+echo "Теперь можно запустить BlockAssist:"
 echo ""
-echo "Затем запустите BlockAssist:"
 echo "  cd ~/blockassist && python run.py"
 echo ""
 echo "Firefox установлен и ярлык создан на рабочем столе"
 echo "========================================="
 
-# Автоматически активируем bashrc
-echo -e "\nАктивирую окружение..."
-exec bash --login
+# Создаем скрипт запуска для удобства
+cat > ~/blockassist/start.sh << 'EOF'
+#!/bin/bash
+export JAVA_PATH=/opt/zulu8.25.0.1-jdk8.0.152-linux_x64
+export PATH=$JAVA_PATH/bin:$PATH
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+cd ~/blockassist
+python run.py
+EOF
+chmod +x ~/blockassist/start.sh
+
+echo -e "\nТакже создан скрипт быстрого запуска:"
+echo "  ~/blockassist/start.sh"
