@@ -2,13 +2,12 @@
 # BlockAssist Ubuntu Installer Script
 # Цей скрипт автоматично встановлює всі залежності для BlockAssist
 set -e  # Вийти при помилці
-
 echo "========================================="
 echo "BlockAssist Installer для Ubuntu"
 echo "========================================="
 
 # Крок 1: Встановлення всіх системних залежностей
-echo -e "\n[1/6] Встановлення системних залежностей..."
+echo -e "\n[1/8] Встановлення системних залежностей..."
 sudo apt update
 sudo apt install -y make build-essential gcc \
     libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
@@ -17,7 +16,7 @@ sudo apt install -y make build-essential gcc \
     curl git
 
 # Крок 2: Клонування репозиторію
-echo -e "\n[2/6] Клонування репозиторію BlockAssist..."
+echo -e "\n[2/8] Клонування репозиторію BlockAssist..."
 if [ -d "blockassist" ]; then
     echo "Директорія blockassist вже існує. Видаляю..."
     rm -rf blockassist
@@ -26,12 +25,12 @@ git clone https://github.com/gensyn-ai/blockassist.git
 cd blockassist
 
 # Крок 3: Встановлення Java
-echo -e "\n[3/6] Встановлення Java 1.8.0_152..."
+echo -e "\n[3/8] Встановлення Java 1.8.0_152..."
 chmod +x setup.sh
 ./setup.sh
 
 # Крок 4: Встановлення pyenv
-echo -e "\n[4/6] Встановлення pyenv..."
+echo -e "\n[4/8] Встановлення pyenv..."
 if command -v pyenv &> /dev/null; then
     echo "pyenv вже встановлено"
 else
@@ -41,15 +40,15 @@ else
     echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
     echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
     echo 'eval "$(pyenv init -)"' >> ~/.bashrc
-    
-    # Завантаження змін
-    export PYENV_ROOT="$HOME/.pyenv"
-    command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
-    eval "$(pyenv init -)"
 fi
 
+# Завантаження pyenv для поточної сесії
+export PYENV_ROOT="$HOME/.pyenv"
+command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+
 # Крок 5: Встановлення Python 3.10
-echo -e "\n[5/6] Встановлення Python 3.10..."
+echo -e "\n[5/8] Встановлення Python 3.10..."
 if pyenv versions | grep -q "3.10"; then
     echo "Python 3.10 вже встановлено"
 else
@@ -76,16 +75,18 @@ if ! command -v nvm &> /dev/null; then
     echo "Встановлення nvm..."
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
     
-    # Активація nvm
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+    # Додавання nvm до bashrc
+    echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc
+    echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.bashrc
+    echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> ~/.bashrc
 else
     echo "nvm вже встановлено"
-    # Активація nvm
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 fi
+
+# Активація nvm для поточної сесії
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 
 # Встановлення Node.js 20
 echo "Встановлення Node.js версії 20..."
@@ -95,14 +96,40 @@ nvm alias default 20
 
 # Перевірка версії
 echo "Поточна версія Node.js: $(node --version)"
+echo "Поточна версія npm: $(npm --version)"
+
+# Активація pyenv окруження знову (на випадок якщо nvm змінив PATH)
+eval "$(pyenv init -)"
+pyenv local 3.10
 
 # Крок 8: Встановлення yarn та залежностей проекту
 echo -e "\n[8/8] Встановлення yarn та залежностей проекту..."
+
+# Перевірка що ми використовуємо правильну версію Node.js
+echo "Перевірка версій перед встановленням yarn:"
+echo "Node.js: $(node --version)"
+echo "Python: $(pyenv exec python --version)"
+
+# Встановлення yarn через corepack
 corepack enable
+corepack prepare yarn@stable --activate
+
+# Встановлення залежностей проекту
 yarn install --frozen-lockfile
 
 echo -e "\n========================================="
 echo "Установка завершена!"
 echo "========================================="
 echo ""
-
+echo "Версії встановлених компонентів:"
+echo "Java: $(java -version 2>&1 | head -n 1)"
+echo "Python: $(pyenv exec python --version)"
+echo "Node.js: $(node --version)"
+echo "Yarn: $(yarn --version)"
+echo ""
+echo "Для запуску BlockAssist використовуйте:"
+echo "cd blockassist"
+echo "pyenv exec python main.py"
+echo ""
+echo "ВАЖЛИВО: Перезавантажте термінал або виконайте 'source ~/.bashrc'"
+echo "щоб всі зміни вступили в силу!"
