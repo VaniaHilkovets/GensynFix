@@ -52,6 +52,15 @@ pyenv global 3.10
 echo -e "${YELLOW}Устанавливаем необходимые Python пакеты...${NC}"
 pip install psutil readchar
 
+# Установка Node.js 20
+echo -e "${YELLOW}Устанавливаем Node.js 20...${NC}"
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Проверка версии Node.js
+echo -e "${GREEN}Версия Node.js:${NC}"
+node --version
+
 # Установка Java для Minecraft/Malmo
 echo -e "${YELLOW}Устанавливаем Java...${NC}"
 sudo apt install -y openjdk-8-jdk
