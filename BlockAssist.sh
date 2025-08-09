@@ -1,175 +1,86 @@
 #!/bin/bash
-# BlockAssist Ubuntu Installer Script
-# Цей скрипт автоматично встановлює всі залежності для BlockAssist
-set -e  # Вийти при помилці
+# BlockAssist Simple Installer Script
+set -e
 
 echo "========================================="
-echo "BlockAssist Installer для Ubuntu"
+echo "BlockAssist Installer"
 echo "========================================="
 
-# Сохраняем начальную директорию
-INITIAL_DIR=$(pwd)
-
-# Крок 1: Встановлення всіх системних залежностей
-echo -e "\n[1/9] Встановлення системних залежностей..."
+# Крок 1: Системні залежності та браузер
+echo -e "\n[1/5] Встановлення системних залежностей та браузера..."
 sudo apt update
-sudo apt install -y make build-essential gcc \
-    libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
-    libsqlite3-dev libncursesw5-dev xz-utils tk-dev \
-    libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
-    curl git wget
+sudo apt install -y make build-essential libssl-dev zlib1g-dev \
+   libbz2-dev libreadline-dev libsqlite3-dev curl git \
+   libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
+   libffi-dev liblzma-dev chromium-browser
 
-# Крок 2: Встановлення Chrome/Chromium
-echo -e "\n[2/9] Встановлення браузера..."
-# Встановлюємо Chromium
-sudo apt install -y chromium-browser
-
-# Або якщо потрібен Google Chrome:
-# wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-# sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
-# sudo apt update
-# sudo apt install -y google-chrome-stable
-
-# Крок 3: Клонування репозиторію
-echo -e "\n[3/9] Клонування репозиторію BlockAssist..."
-cd "$INITIAL_DIR"
-if [ -d "blockassist" ]; then
-    echo "Директорія blockassist вже існує. Видаляю..."
-    rm -rf blockassist
-fi
+# Крок 2: Клонування і запуск setup.sh
+echo -e "\n[2/5] Клонування репозиторію..."
+cd ~
 git clone https://github.com/gensyn-ai/blockassist.git
 cd blockassist
 PROJECT_DIR=$(pwd)
 
-# Крок 4: Встановлення Java
-echo -e "\n[4/9] Встановлення Java 1.8.0_152..."
+echo -e "\n[3/5] Запуск офіційного скрипта установки..."
 chmod +x setup.sh
 ./setup.sh
 
-# Крок 5: Встановлення pyenv
-echo -e "\n[5/9] Встановлення pyenv..."
-if command -v pyenv &> /dev/null; then
-    echo "pyenv вже встановлено"
-else
-    # Видалення старого pyenv якщо існує
-    if [ -d "$HOME/.pyenv" ]; then
-        echo "Видаляю стару директорію pyenv..."
-        rm -rf "$HOME/.pyenv"
-    fi
-    
-    curl -fsSL https://pyenv.run | bash
-    
-    # Додавання pyenv до bashrc
-    echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
-    echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
-    echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+# Крок 4: Встановлення pyenv і Python
+echo -e "\n[4/5] Встановлення Python через pyenv..."
+if ! command -v pyenv &> /dev/null; then
+   curl -fsSL https://pyenv.run | bash
+   echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+   echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+   echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+   
+   export PYENV_ROOT="$HOME/.pyenv"
+   export PATH="$PYENV_ROOT/bin:$PATH"
+   eval "$(pyenv init -)"
 fi
 
-# Завантаження pyenv для поточної сесії
-export PYENV_ROOT="$HOME/.pyenv"
-command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
-
-# Переходимо назад в директорію проекту
-cd "$PROJECT_DIR"
-
-# Крок 6: Встановлення Python 3.10
-echo -e "\n[6/9] Встановлення Python 3.10..."
-if pyenv versions | grep -q "3.10"; then
-    echo "Python 3.10 вже встановлено"
-else
-    pyenv install 3.10
-fi
-
-# Встановлення Python 3.10 як локальну версію для цього проекту
+pyenv install 3.10
 pyenv local 3.10
+pip install psutil readchar
 
-# Крок 7: Встановлення Python пакетів
-echo -e "\n[7/9] Встановлення Python пакетів..."
-pyenv exec pip install --upgrade pip
-pyenv exec pip install psutil readchar
-
-# Встановлення Selenium або Playwright якщо потрібно
-# pyenv exec pip install selenium playwright
-# pyenv exec playwright install
-
-# Встановлення requirements.txt якщо існує
-if [ -f "requirements.txt" ]; then
-    echo "Знайдено requirements.txt, встановлюю залежності..."
-    pyenv exec pip install -r requirements.txt
+# Крок 5: Створення ярлика на робочому столі
+echo -e "\n[5/5] Створення ярлика на робочому столі..."
+DESKTOP_DIR="$HOME/Desktop"
+if [ ! -d "$DESKTOP_DIR" ]; then
+   DESKTOP_DIR="$HOME/Рабочий стол"
+fi
+if [ ! -d "$DESKTOP_DIR" ]; then
+   mkdir -p "$DESKTOP_DIR"
 fi
 
-# Крок 8: Встановлення Node.js 20
-echo -e "\n[8/9] Встановлення Node.js 20..."
-if ! command -v nvm &> /dev/null; then
-    echo "Встановлення nvm..."
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
-    
-    # Додавання nvm до bashrc
-    echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc
-    echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.bashrc
-    echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> ~/.bashrc
-else
-    echo "nvm вже встановлено"
-fi
+cat > "$DESKTOP_DIR/BlockAssist.desktop" << EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=BlockAssist
+Comment=Run BlockAssist
+Icon=$PROJECT_DIR/splash.png
+Exec=gnome-terminal --working-directory=$PROJECT_DIR -- bash -c "pyenv local 3.10 && python run.py; read -p 'Press Enter to close...'"
+Terminal=false
+Categories=Application;Development;
+EOF
 
-# Активація nvm для поточної сесії
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+# Робимо ярлик виконуваним
+chmod +x "$DESKTOP_DIR/BlockAssist.desktop"
 
-# Встановлення Node.js 20
-echo "Встановлення Node.js версії 20..."
-nvm install 20
-nvm use 20
-nvm alias default 20
-
-# Перевірка версії
-echo "Поточна версія Node.js: $(node --version)"
-echo "Поточна версія npm: $(npm --version)"
-
-# Переходимо назад в директорію проекту
-cd "$PROJECT_DIR"
-
-# Активація pyenv окруження знову (на випадок якщо nvm змінив PATH)
-eval "$(pyenv init -)"
-pyenv local 3.10
-
-# Крок 9: Встановлення yarn та залежностей проекту
-echo -e "\n[9/9] Встановлення yarn та залежностей проекту..."
-
-# Перевірка що ми використовуємо правильну версію Node.js
-echo "Перевірка версій перед встановленням yarn:"
-echo "Node.js: $(node --version)"
-echo "Python: $(pyenv exec python --version)"
-echo "Поточна директорія: $(pwd)"
-
-# Встановлення yarn через corepack
-corepack enable
-corepack prepare yarn@stable --activate
-
-# Встановлення залежностей проекту
-if [ -d "modal-login" ]; then
-    echo "Переходжу в modal-login..."
-    cd modal-login
-    
-    # Виправляємо конфлікт версій viem
-    echo "Виправляю конфлікт версій..."
-    yarn add viem@2.29.2
-    
-    # Встановлюємо залежності
-    echo "Встановлюю залежності..."
-    yarn install
-    
-    # Будуємо проект з пропуском перевірки типів якщо є помилки
-    echo "Будую проект..."
-    yarn build || SKIP_TYPE_CHECK=true yarn build
-    
-    cd ..
-else
-    echo "Попередження: директорія modal-login не знайдена"
+# Якщо це Ubuntu з GNOME, дозволяємо запуск
+if command -v gio &> /dev/null; then
+   gio set "$DESKTOP_DIR/BlockAssist.desktop" metadata::trusted true
 fi
 
 echo -e "\n========================================="
 echo "Установка завершена!"
+echo ""
+echo "✅ Встановлено:"
+echo "  - Chromium Browser"
+echo "  - BlockAssist та всі залежності"
+echo "  - Ярлик на робочому столі"
+echo ""
+echo "Для запуску:"
+echo "  - Двічі клікніть на ярлик BlockAssist на робочому столі"
+echo "  - Або виконайте: cd $PROJECT_DIR && python run.py"
 echo "========================================="
