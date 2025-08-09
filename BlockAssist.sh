@@ -35,6 +35,9 @@ chmod +x "$DESKTOP_DIR/Firefox.desktop"
 # Step 1: Clone repo
 echo -e "\n[1/5] Clone the repo and enter the directory..."
 cd ~
+if [ -d "blockassist" ]; then
+    rm -rf blockassist
+fi
 git clone https://github.com/gensyn-ai/blockassist.git
 cd blockassist
 
@@ -44,12 +47,17 @@ echo -e "\n[2/5] Install Java 1.8.0_152..."
 
 # Step 3: Install pyenv
 echo -e "\n[3/5] Install pyenv..."
+if [ -d "$HOME/.pyenv" ]; then
+    rm -rf "$HOME/.pyenv"
+fi
 curl -fsSL https://pyenv.run | bash
 
-# Добавляем pyenv в bashrc
-echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
-echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
-echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+# Добавляем pyenv в bashrc ЕСЛИ ЕЩЕ НЕТ
+if ! grep -q 'export PYENV_ROOT="$HOME/.pyenv"' ~/.bashrc; then
+    echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+    echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+    echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+fi
 
 # Активируем pyenv для текущей сессии
 export PYENV_ROOT="$HOME/.pyenv"
@@ -68,13 +76,20 @@ eval "$(pyenv init -)"
 
 # Step 5: Install psutil and readchar
 echo -e "\n[5/5] Install psutil and readchar..."
-pip install psutil readchar
+~/.pyenv/shims/pip install psutil readchar
 
 echo -e "\n========================================="
 echo "Установка завершена!"
 echo ""
-echo "Теперь вы можете запустить BlockAssist:"
+echo "ВАЖНО: Выполните эту команду для активации pyenv:"
+echo "  source ~/.bashrc"
+echo ""
+echo "Затем запустите BlockAssist:"
 echo "  cd ~/blockassist && python run.py"
 echo ""
 echo "Firefox установлен и ярлык создан на рабочем столе"
 echo "========================================="
+
+# Автоматически активируем bashrc
+echo -e "\nАктивирую окружение..."
+exec bash --login
