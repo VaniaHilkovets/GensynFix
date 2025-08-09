@@ -60,7 +60,7 @@ fi
 pyenv local 3.10
 
 # Крок 6: Встановлення Python пакетів
-echo -e "\n[6/6] Встановлення Python пакетів..."
+echo -e "\n[6/8] Встановлення Python пакетів..."
 pyenv exec pip install --upgrade pip
 pyenv exec pip install psutil readchar
 
@@ -70,11 +70,45 @@ if [ -f "requirements.txt" ]; then
     pyenv exec pip install -r requirements.txt
 fi
 
+# Крок 7: Встановлення Node.js 20
+echo -e "\n[7/8] Встановлення Node.js 20..."
+if ! command -v nvm &> /dev/null; then
+    echo "Встановлення nvm..."
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
+    
+    # Активація nvm
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+else
+    echo "nvm вже встановлено"
+    # Активація nvm
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+fi
+
+# Встановлення Node.js 20
+echo "Встановлення Node.js версії 20..."
+nvm install 20
+nvm use 20
+nvm alias default 20
+
+# Перевірка версії
+echo "Поточна версія Node.js: $(node --version)"
+
+# Крок 8: Встановлення yarn та залежностей проекту
+echo -e "\n[8/8] Встановлення yarn та залежностей проекту..."
+corepack enable
+yarn install --frozen-lockfile
+
 echo -e "\n========================================="
 echo "Установка завершена!"
 echo "========================================="
 echo ""
 echo "Для запуску BlockAssist використовуйте:"
 echo "cd blockassist"
-echo "pyenv exec python assistant.py"
+echo "pyenv exec python run.py"
+echo ""
+echo "Node.js версія: $(node --version)"
+echo "Python версія: $(pyenv exec python --version)"
 echo ""
