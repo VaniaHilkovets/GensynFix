@@ -54,10 +54,40 @@ pyenv global 3.10
 echo -e "${YELLOW}Устанавливаем необходимые Python пакеты...${NC}"
 pip install psutil readchar
 
+# Установка Java для Minecraft/Malmo
+echo -e "${YELLOW}Устанавливаем Java для Minecraft/Malmo...${NC}"
+sudo apt update
+sudo apt install -y openjdk-8-jdk
+
+# Установка дополнительных зависимостей для Malmo
+echo -e "${YELLOW}Устанавливаем дополнительные зависимости для Malmo...${NC}"
+sudo apt install -y libgl1-mesa-glx libegl1-mesa libxrandr2 libxss1 libxcursor1 libxcomposite1 libasound2 libxi6 libxtst6
+
+# Установка xvfb для виртуального дисплея (если используется VNC)
+echo -e "${YELLOW}Устанавливаем xvfb для виртуального дисплея...${NC}"
+sudo apt install -y xvfb
+
+# Активация виртуального окружения blockassist и установка requirements
+echo -e "${YELLOW}Устанавливаем зависимости Python для blockassist...${NC}"
+cd ~/blockassist
+if [ -f "blockassist-venv/bin/activate" ]; then
+    source blockassist-venv/bin/activate
+    pip install --upgrade pip
+    if [ -f "requirements.txt" ]; then
+        pip install -r requirements.txt
+    fi
+fi
+
+# Проверка установки Java
+echo -e "${GREEN}Проверка установки Java:${NC}"
+java -version
+
 # Вывод финальной команды
 echo -e "${GREEN}=== Установка завершена! ===${NC}"
-echo -e "${YELLOW}Для запуска BlockAssist используйте команду:${NC}"
+echo -e "${YELLOW}Для запуска BlockAssist используйте одну из команд:${NC}"
 echo -e "${GREEN}cd ~/blockassist && python run.py${NC}"
+echo -e "${YELLOW}или если требуется виртуальный дисплей:${NC}"
+echo -e "${GREEN}cd ~/blockassist && xvfb-run -a python run.py${NC}"
 echo ""
 echo -e "${YELLOW}Примечание: Возможно, потребуется перезапустить терминал или выполнить:${NC}"
 echo -e "${GREEN}source ~/.bashrc${NC}"
