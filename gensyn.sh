@@ -29,36 +29,43 @@ get_current_count() {
 }
 
 ensure_node_version() {
-  CURRENT_MAJOR=0
-  if command -v node >/dev/null 2>&1; then
-    CURRENT_MAJOR=$(node -v | sed 's/^v\([0-9]\+\).*/\1/')
-  fi
+  echo "[+] Проверяем Node.js..."
 
-  if [ "$CURRENT_MAJOR" -ne 20 ]; then
-    echo "[!] Устанавливаем Node.js 20..."
+  # Удаляем существующие версии Node.js и npm
+  if command -v node >/dev/null 2>&1 || command -v npm >/dev/null 2>&1; then
+    echo "[!] Обнаружены Node.js или npm. Удаляем..."
     apt purge -y nodejs npm
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    apt install -y nodejs
+    rm -rf /usr/local/bin/node /usr/local/bin/npm /usr/bin/node /usr/bin/npm
   fi
 
+  # Устанавливаем Node.js 20
+  echo "[!] Устанавливаем Node.js 20..."
+  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  apt update
+  apt install -y nodejs
+
+  # Проверяем версию
   INST_MAJOR=$(node -v | sed 's/^v\([0-9]\+\).*/\1/')
   if [ "$INST_MAJOR" -ne 20 ]; then
     echo "[X] Не удалось установить Node.js 20. Текущая версия: $(node -v)"
     exit 1
   fi
+  echo "[+] Node.js 20 установлен: $(node -v)"
 
-  if ! command -v pip3 &>/dev/null; then
+  # Проверяем и устанавливаем pip3
+  if ! command -v pip3 >/dev/null 2>&1; then
     echo "[!] pip3 не найден. Устанавливаем..."
     apt update && apt install -y python3-pip
     ln -sf "$(which pip3)" /usr/bin/pip
   fi
 
-  JINJA_VERSION=$(pip show jinja2 2>/dev/null | grep Version | awk '{print $2}')
+  # Проверяем и устанавливаем jinja2
+  JINJA_VERSION=$(pip3 show jinja2 2>/dev/null | grep Version | awk '{print $2}')
   if [ -z "$JINJA_VERSION" ] || [ "$(echo "$JINJA_VERSION" | awk -F. '{print ($1*1000+$2*10+$3)}')" -lt 3100 ]; then
     echo "[!] Устанавливаем jinja2>=3.1.0..."
-    pip install --upgrade jinja2
+    pip3 install --upgrade jinja2
   fi
-  echo "[+] jinja2 version: $(pip show jinja2 | grep Version | awk '{print $2}')"
+  echo "[+] jinja2 версия: $(pip3 show jinja2 | grep Version | awk '{print $2}')"
 }
 
 run_setup() {
