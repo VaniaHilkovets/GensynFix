@@ -93,23 +93,22 @@ install_python_deps() {
 # Показать меню
 show_menu() {
     echo -e "\n===== Меню GensynFix ====="
-    echo "1) Установить ноды"
-    echo "2) Логин по очереди (одна нода -> проброс -> подтверждение)"
-    echo "3) Запуск всех нод в tmux"
-    echo "4) Удалить всё ноды"
+    echo "1) Установить ноду"
+    echo "2) Логин ноды"
+    echo "3) Запуск ноды в tmux"
+    echo "4) Удалить ноду"
     echo "5) Обновить GensynFix"
-    echo "6) Показать статус нод"
+    echo "6) Показать статус ноды"
     echo "7) Выйти"
 }
 
-# Получить количество установленных нод
-get_current_count() {
-    COUNT=$(find "$BASE_DIR" -maxdepth 1 -name "GensynFix*" -type d 2>/dev/null | wc -l)
-    if [ "$COUNT" -eq 0 ]; then
-        echo "[!] Нет установленных нод. Установите сначала (опция 1)."
+# Проверить установлена ли нода
+check_node_installed() {
+    if [ ! -d "$BASE_DIR/GensynFix" ]; then
+        echo "[!] Нода не установлена. Установите сначала (опция 1)."
         return 1
     fi
-    echo "[+] Обнаружено $COUNT нод."
+    echo "[+] Нода найдена."
     return 0
 }
 
@@ -134,198 +133,156 @@ check_port() {
     fi
 }
 
-# Установка нод
+# Установка ноды
 run_setup() {
-    echo "[+] Начинаем установку..."
+    echo "[+] Начинаем установку ноды..."
     
     install_base_packages
     install_nvm_and_node
     install_python_deps
     
-    # Запрашиваем количество нод
-    while true; do
-        read -p "Сколько экземпляров нод установить? (1-10): " COUNT
-        if [[ "$COUNT" =~ ^[1-9]$|^10$ ]]; then
-            break
-        else
-            echo "[!] Введите число от 1 до 10"
-        fi
-    done
-    
     echo "[+] Клонируем GensynFix..."
-    rm -rf "$BASE_DIR/GensynFix"*
+    rm -rf "$BASE_DIR/GensynFix"
     
     git clone "$REPO_URL" "$BASE_DIR/GensynFix" || safe_exit "Не удалось клонировать репозиторий"
     
     # Делаем скрипты исполняемыми
     find "$BASE_DIR/GensynFix" -name "*.sh" -exec chmod +x {} \; || true
     
-    # Создаем копии для дополнительных нод
-    for i in $(seq 2 $COUNT); do
-        echo "[+] Создаем ноду $i..."
-        cp -r "$BASE_DIR/GensynFix" "$BASE_DIR/GensynFix$i" || safe_exit "Не удалось создать копию ноды $i"
-        find "$BASE_DIR/GensynFix$i" -name "*.sh" -exec chmod +x {} \; || true
-    done
-    
-    # Настраиваем порты для каждой ноды
-    for i in $(seq 1 $COUNT); do
-        DIR="$BASE_DIR/GensynFix"
-        [[ $i -gt 1 ]] && DIR="$BASE_DIR/GensynFix$i"
-        
-        if [ -f "$DIR/run_rl_swarm.sh" ]; then
-            # Добавляем переменную LOGIN_PORT в начало файла если её нет
-            if ! grep -q "LOGIN_PORT=" "$DIR/run_rl_swarm.sh"; then
-                sed -i '1i LOGIN_PORT=${LOGIN_PORT:-3000}' "$DIR/run_rl_swarm.sh"
-            fi
-            
-            # Заменяем команду запуска yarn с указанием порта
-            sed -i 's|yarn start >> "$ROOT/logs/yarn.log" 2>&1 &|PORT=$LOGIN_PORT yarn start >> "$ROOT/logs/yarn.log" 2>\&1 \&|' "$DIR/run_rl_swarm.sh"
+    # Настраиваем порт для ноды (используем порт 3000)
+    DIR="$BASE_DIR/GensynFix"
+    if [ -f "$DIR/run_rl_swarm.sh" ]; then
+        # Добавляем переменную LOGIN_PORT в начало файла если её нет
+        if ! grep -q "LOGIN_PORT=" "$DIR/run_rl_swarm.sh"; then
+            sed -i '1i LOGIN_PORT=${LOGIN_PORT:-3000}' "$DIR/run_rl_swarm.sh"
         fi
-    done
+        
+        # Заменяем команду запуска yarn с указанием порта
+        sed -i 's|yarn start >> "$ROOT/logs/yarn.log" 2>&1 &|PORT=$LOGIN_PORT yarn start >> "$ROOT/logs/yarn.log" 2>\&1 \&|' "$DIR/run_rl_swarm.sh"
+    fi
     
-    echo "✅ Установка $COUNT нод завершена успешно."
+    echo "✅ Установка ноды завершена успешно."
 }
 
-# Последовательный логин
-run_login_sequential() {
+# Логин ноды
+run_login() {
     ensure_nvm
     
-    if ! get_current_count; then
+    if ! check_node_installed; then
         return 1
     fi
     
-    echo "[+] Начинаем последовательный логин $COUNT нод..."
+    DIR="$BASE_DIR/GensynFix"
+    PORT=3000
     
-    for i in $(seq 1 $COUNT); do
-        DIR="$BASE_DIR/GensynFix"
-        [[ $i -gt 1 ]] && DIR="$BASE_DIR/GensynFix$i"
-        PORT=$((2999 + i))
-        
-        echo -e "\n[+] === Нода $i (порт $PORT) ==="
-        
-        # Проверяем что порт свободен
-        if check_port $PORT; then
-            echo "[!] Порт $PORT уже занят. Освобождаем..."
-            fuser -k $PORT/tcp 2>/dev/null || true
-            sleep 2
+    echo "[+] Начинаем логин ноды (порт $PORT)..."
+    
+    # Проверяем что порт свободен
+    if check_port $PORT; then
+        echo "[!] Порт $PORT уже занят. Освобождаем..."
+        fuser -k $PORT/tcp 2>/dev/null || true
+        sleep 2
+    fi
+    
+    echo "[+] Запускаем tmux-сессию node на порту $PORT"
+    tmux kill-session -t "node" 2>/dev/null || true
+    
+    # Запускаем ноду
+    tmux new-session -d -s "node" -n run "cd $DIR && export NVM_DIR='$HOME/.nvm' && [ -s '$NVM_DIR/nvm.sh' ] && \. '$NVM_DIR/nvm.sh' && nvm use 20 && LOGIN_PORT=$PORT ./run_rl_swarm.sh"
+    
+    # Ждем запуска
+    echo -n "[*] Ждем запуска ноды... "
+    local attempts=0
+    while [ $attempts -lt 60 ]; do
+        if tmux capture-pane -t "node" -p 2>/dev/null | grep -q "Started server process\|Server listening\|ready"; then
+            echo "OK"
+            break
         fi
-        
-        echo "[+] Запускаем tmux-сессию node$i на порту $PORT"
-        tmux kill-session -t "node$i" 2>/dev/null || true
-        
-        # Запускаем ноду
-        tmux new-session -d -s "node$i" -n run "cd $DIR && export NVM_DIR='$HOME/.nvm' && [ -s '$NVM_DIR/nvm.sh' ] && \. '$NVM_DIR/nvm.sh' && nvm use 20 && LOGIN_PORT=$PORT ./run_rl_swarm.sh"
-        
-        # Ждем запуска
-        echo -n "[*] Ждем запуска ноды... "
-        local attempts=0
-        while [ $attempts -lt 60 ]; do
-            if tmux capture-pane -t "node$i" -p 2>/dev/null | grep -q "Started server process\|Server listening\|ready"; then
+        sleep 2
+        attempts=$((attempts + 1))
+    done
+    
+    if [ $attempts -eq 60 ]; then
+        echo "TIMEOUT"
+        echo "[!] Нода не запустилась за отведенное время"
+        tmux capture-pane -t "node" -p | tail -20
+        return 1
+    fi
+    
+    # Запускаем проброс порта
+    echo "[+] Запускаем проброс порта $PORT"
+    TUNNEL_SESSION="tunnel"
+    tmux kill-session -t "$TUNNEL_SESSION" 2>/dev/null || true
+    rm -f "/tmp/tunnel.log"
+    
+    tmux new-session -d -s "$TUNNEL_SESSION" "ssh -o StrictHostKeyChecking=no -R 80:localhost:$PORT nokey@localhost.run 2>&1 | tee /tmp/tunnel.log"
+    
+    # Ждем ссылку
+    echo -n "[*] Ожидаем появления ссылки... "
+    local link_attempts=0
+    LINK=""
+    while [ $link_attempts -lt 30 ]; do
+        if [ -f "/tmp/tunnel.log" ]; then
+            LINK=$(grep -o 'https://[^ ]*' "/tmp/tunnel.log" 2>/dev/null | grep '\.lhr\.life' | head -n1 || true)
+            if [ -n "$LINK" ]; then
                 echo "OK"
                 break
             fi
-            sleep 2
-            attempts=$((attempts + 1))
-        done
-        
-        if [ $attempts -eq 60 ]; then
-            echo "TIMEOUT"
-            echo "[!] Нода $i не запустилась за отведенное время"
-            tmux capture-pane -t "node$i" -p | tail -20
-            continue
         fi
-        
-        # Запускаем проброс порта
-        echo "[+] Запускаем проброс порта $PORT"
-        TUNNEL_SESSION="tunnel$i"
-        tmux kill-session -t "$TUNNEL_SESSION" 2>/dev/null || true
-        rm -f "/tmp/tunnel$i.log"
-        
-        tmux new-session -d -s "$TUNNEL_SESSION" "ssh -o StrictHostKeyChecking=no -R 80:localhost:$PORT nokey@localhost.run 2>&1 | tee /tmp/tunnel$i.log"
-        
-        # Ждем ссылку
-        echo -n "[*] Ожидаем появления ссылки... "
-        local link_attempts=0
-        LINK=""
-        while [ $link_attempts -lt 30 ]; do
-            if [ -f "/tmp/tunnel$i.log" ]; then
-                LINK=$(grep -o 'https://[^ ]*' "/tmp/tunnel$i.log" 2>/dev/null | grep '\.lhr\.life' | head -n1 || true)
-                if [ -n "$LINK" ]; then
-                    echo "OK"
-                    break
-                fi
-            fi
-            sleep 2
-            link_attempts=$((link_attempts + 1))
-        done
-        
-        if [ -z "$LINK" ]; then
-            echo "TIMEOUT"
-            echo "[!] Не удалось получить ссылку для ноды $i"
-            continue
-        fi
-        
-        echo -e "\n🔗 Логин ноды $i: $LINK"
-        echo "Откройте эту ссылку в браузере для логина"
-        
-        read -p "После успешного логина нажмите Enter для продолжения..."
-        
-        # Завершаем проброс
-        echo "[+] Завершаем проброс $TUNNEL_SESSION"
-        tmux kill-session -t "$TUNNEL_SESSION" 2>/dev/null || true
-        rm -f "/tmp/tunnel$i.log"
+        sleep 2
+        link_attempts=$((link_attempts + 1))
     done
     
-    echo -e "\n⏳ Все ноды залогинены. Ждем $LOGIN_WAIT_TIMEOUT секунд перед очисткой..."
-    sleep $LOGIN_WAIT_TIMEOUT
-    
-    # Очищаем все временные сессии
-    for i in $(seq 1 $COUNT); do
-        tmux kill-session -t "tunnel$i" 2>/dev/null || true
-        tmux kill-session -t "node$i" 2>/dev/null || true
-    done
-    
-    echo "✅ Все сессии завершены. Готово к запуску."
-}
-
-# Запуск всех нод
-run_start() {
-    ensure_nvm
-    
-    if ! get_current_count; then
+    if [ -z "$LINK" ]; then
+        echo "TIMEOUT"
+        echo "[!] Не удалось получить ссылку для логина"
         return 1
     fi
     
-    echo "[+] Запускаем $COUNT нод..."
+    echo -e "\n🔗 Логин ноды: $LINK"
+    echo "Откройте эту ссылку в браузере для логина"
+    
+    read -p "После успешного логина нажмите Enter для продолжения..."
+    
+    # Завершаем проброс
+    echo "[+] Завершаем проброс $TUNNEL_SESSION"
+    tmux kill-session -t "$TUNNEL_SESSION" 2>/dev/null || true
+    rm -f "/tmp/tunnel.log"
+    
+    echo -e "\n⏳ Ждем $LOGIN_WAIT_TIMEOUT секунд перед очисткой..."
+    sleep $LOGIN_WAIT_TIMEOUT
+    
+    # Очищаем сессию логина
+    tmux kill-session -t "node" 2>/dev/null || true
+    
+    echo "✅ Логин завершен. Готово к запуску."
+}
+
+# Запуск ноды
+run_start() {
+    ensure_nvm
+    
+    if ! check_node_installed; then
+        return 1
+    fi
+    
+    echo "[+] Запускаем ноду..."
+    
+    DIR="$BASE_DIR/GensynFix"
+    PORT=3000
     
     # Проверяем что все скрипты исполняемые
-    for i in $(seq 1 $COUNT); do
-        DIR="$BASE_DIR/GensynFix"
-        [[ $i -gt 1 ]] && DIR="$BASE_DIR/GensynFix$i"
-        find "$DIR" -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
-    done
+    find "$DIR" -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
     
-    SESSION="gensyn_start"
+    SESSION="gensyn_node"
     tmux kill-session -t $SESSION 2>/dev/null || true
     
-    for i in $(seq 1 $COUNT); do
-        DIR="$BASE_DIR/GensynFix"
-        [[ $i -gt 1 ]] && DIR="$BASE_DIR/GensynFix$i"
-        PORT=$((2999 + i))
-        
-        # Формируем команду с загрузкой NVM
-        CMD="cd $DIR && export NVM_DIR='$HOME/.nvm' && [ -s '$NVM_DIR/nvm.sh' ] && \. '$NVM_DIR/nvm.sh' && nvm use 20 && LOGIN_PORT=$PORT ./auto_restart.sh"
-        
-        if [[ $i -eq 1 ]]; then
-            tmux new-session -d -s $SESSION -n "node$i" -x 120 -y 30 "$CMD"
-        else
-            tmux split-window -t $SESSION -h "$CMD"
-            tmux select-layout -t $SESSION tiled
-        fi
-    done
+    # Формируем команду с загрузкой NVM
+    CMD="cd $DIR && export NVM_DIR='$HOME/.nvm' && [ -s '$NVM_DIR/nvm.sh' ] && \. '$NVM_DIR/nvm.sh' && nvm use 20 && LOGIN_PORT=$PORT ./auto_restart.sh"
     
-    tmux select-layout -t $SESSION tiled
-    echo "✅ Все ноды запущены в tmux сессии '$SESSION'"
+    tmux new-session -d -s $SESSION -n "node" -x 120 -y 30 "$CMD"
+    
+    echo "✅ Нода запущена в tmux сессии '$SESSION'"
     echo "Для подключения используйте: tmux attach -t $SESSION"
     echo "Для отключения без остановки: Ctrl+B, затем D"
     
@@ -339,16 +296,18 @@ run_start() {
 run_update() {
     ensure_nvm
     
-    if ! get_current_count; then
+    if ! check_node_installed; then
         return 1
     fi
     
     echo "[+] Обновляем GensynFix..."
     
-    # Обновляем основную папку
-    if [ -d "$BASE_DIR/GensynFix/.git" ]; then
-        echo "[+] Обновляем основную папку GensynFix из репозитория..."
-        cd "$BASE_DIR/GensynFix"
+    DIR="$BASE_DIR/GensynFix"
+    
+    # Обновляем папку
+    if [ -d "$DIR/.git" ]; then
+        echo "[+] Обновляем GensynFix из репозитория..."
+        cd "$DIR"
         
         # Сохраняем важные файлы
         [ -f "swarm.pem" ] && cp "swarm.pem" "/tmp/swarm.pem.backup"
@@ -364,54 +323,33 @@ run_update() {
         
         cd - >/dev/null
     else
-        echo "[!] Папка $BASE_DIR/GensynFix не является git-репозиторием."
+        echo "[!] Папка $DIR не является git-репозиторием."
         return 1
     fi
     
-    # Обновляем копии
-    echo "[+] Синхронизируем обновления с копиями..."
-    for i in $(seq 2 $COUNT); do
-        DEST="$BASE_DIR/GensynFix$i"
-        if [ -d "$DEST" ]; then
-            echo "[+] Обновляем $DEST"
-            rsync -a \
-                --exclude='.git' \
-                --exclude='swarm.pem' \
-                --exclude='modal-login/temp-data/' \
-                --exclude='logs/' \
-                --exclude='node_modules/' \
-                "$BASE_DIR/GensynFix/" "$DEST/" || true
-        fi
-    done
+    # Настраиваем порт заново
+    find "$DIR" -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
     
-    # Настраиваем порты заново
-    for i in $(seq 1 $COUNT); do
-        DIR="$BASE_DIR/GensynFix"
-        [[ $i -gt 1 ]] && DIR="$BASE_DIR/GensynFix$i"
-        
-        find "$DIR" -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
-        
-        if [ -f "$DIR/run_rl_swarm.sh" ]; then
-            if ! grep -q "LOGIN_PORT=" "$DIR/run_rl_swarm.sh"; then
-                sed -i '1i LOGIN_PORT=${LOGIN_PORT:-3000}' "$DIR/run_rl_swarm.sh"
-            fi
-            sed -i 's|yarn start >> "$ROOT/logs/yarn.log" 2>&1 &|PORT=$LOGIN_PORT yarn start >> "$ROOT/logs/yarn.log" 2>\&1 \&|' "$DIR/run_rl_swarm.sh"
+    if [ -f "$DIR/run_rl_swarm.sh" ]; then
+        if ! grep -q "LOGIN_PORT=" "$DIR/run_rl_swarm.sh"; then
+            sed -i '1i LOGIN_PORT=${LOGIN_PORT:-3000}' "$DIR/run_rl_swarm.sh"
         fi
-    done
+        sed -i 's|yarn start >> "$ROOT/logs/yarn.log" 2>&1 &|PORT=$LOGIN_PORT yarn start >> "$ROOT/logs/yarn.log" 2>\&1 \&|' "$DIR/run_rl_swarm.sh"
+    fi
     
     echo "✅ Обновление завершено успешно."
 }
 
-# Показать статус нод
+# Показать статус ноды
 show_status() {
-    if ! get_current_count; then
+    if ! check_node_installed; then
         return 1
     fi
     
-    echo -e "\n===== Статус нод ====="
+    echo -e "\n===== Статус ноды ====="
     
     # Проверяем tmux сессии
-    SESSIONS=$(tmux list-sessions 2>/dev/null | grep -E "(node[0-9]+|gensyn_start)" | awk -F: '{print $1}' || true)
+    SESSIONS=$(tmux list-sessions 2>/dev/null | grep -E "(node|gensyn_node)" | awk -F: '{print $1}' || true)
     if [ -n "$SESSIONS" ]; then
         echo "Активные tmux сессии:"
         echo "$SESSIONS" | while read session; do
@@ -421,34 +359,44 @@ show_status() {
         echo "Нет активных tmux сессий"
     fi
     
-    echo -e "\nПорты и процессы:"
-    for i in $(seq 1 $COUNT); do
-        PORT=$((2999 + i))
-        if check_port $PORT; then
-            PID=$(lsof -ti:$PORT)
-            echo "  Нода $i (порт $PORT): АКТИВНА (PID: $PID)"
-        else
-            echo "  Нода $i (порт $PORT): НЕАКТИВНА"
-        fi
-    done
+    echo -e "\nПорт и процесс:"
+    PORT=3000
+    if check_port $PORT; then
+        PID=$(lsof -ti:$PORT)
+        echo "  Нода (порт $PORT): АКТИВНА (PID: $PID)"
+    else
+        echo "  Нода (порт $PORT): НЕАКТИВНА"
+    fi
     
-    echo -e "\nПапки нод:"
-    for i in $(seq 1 $COUNT); do
-        DIR="$BASE_DIR/GensynFix"
-        [[ $i -gt 1 ]] && DIR="$BASE_DIR/GensynFix$i"
+    echo -e "\nПапка ноды:"
+    DIR="$BASE_DIR/GensynFix"
+    if [ -d "$DIR" ]; then
+        SIZE=$(du -sh "$DIR" 2>/dev/null | cut -f1)
+        echo "  $DIR: существует ($SIZE)"
         
-        if [ -d "$DIR" ]; then
-            SIZE=$(du -sh "$DIR" 2>/dev/null | cut -f1)
-            echo "  $DIR: существует ($SIZE)"
+        # Дополнительная информация
+        if [ -f "$DIR/swarm.pem" ]; then
+            echo "  Ключ swarm.pem: найден"
         else
+            echo "  Ключ swarm.pem: НЕ НАЙДЕН"
+        fi
+        
+        if [ -d "$DIR/logs" ]; then
+            LOG_COUNT=$(ls -1 "$DIR/logs/" 2>/dev/null | wc -l)
+            echo "  Логи: $LOG_COUNT файлов"
+        fi
+    else
+        echo "  $DIR: НЕ СУЩЕСТВУЕТ"
+    fi
+}
             echo "  $DIR: НЕ СУЩЕСТВУЕТ"
         fi
     done
 }
 
-# Удаление всех нод
+# Удаление ноды
 run_cleanup() {
-    echo "⚠️  Удалить ВСЕ ноды и данные? (y/N):"
+    echo "⚠️  Удалить ноду и все данные? (y/N):"
     read -r YES
     
     if [[ ! "$YES" =~ ^[Yy]$ ]]; then
@@ -459,25 +407,23 @@ run_cleanup() {
     echo "💀 Останавливаем все процессы..."
     
     # Убиваем tmux сессии
-    tmux list-sessions 2>/dev/null | grep -E "(node[0-9]+|gensyn_start|tunnel[0-9]+)" | awk -F: '{print $1}' | xargs -I{} tmux kill-session -t {} 2>/dev/null || true
+    tmux list-sessions 2>/dev/null | grep -E "(node|gensyn_node|tunnel)" | awk -F: '{print $1}' | xargs -I{} tmux kill-session -t {} 2>/dev/null || true
     
     # Убиваем процессы по именам
     pkill -f GensynFix 2>/dev/null || true
     pkill -f run_rl_swarm.sh 2>/dev/null || true
     pkill -f auto_restart.sh 2>/dev/null || true
     
-    # Освобождаем порты
-    for i in {3000..3020}; do
-        fuser -k $i/tcp 2>/dev/null || true
-    done
+    # Освобождаем порт 3000
+    fuser -k 3000/tcp 2>/dev/null || true
     
     sleep 3
     
-    echo "🧹 Удаляем папки..."
-    rm -rf "$BASE_DIR"/GensynFix* 2>/dev/null || true
+    echo "🧹 Удаляем папку..."
+    rm -rf "$BASE_DIR/GensynFix" 2>/dev/null || true
     rm -f /tmp/tunnel*.log 2>/dev/null || true
     
-    echo "✅ Всё удалено успешно"
+    echo "✅ Нода удалена успешно"
 }
 
 # Основной цикл
