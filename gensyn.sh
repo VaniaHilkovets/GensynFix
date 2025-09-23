@@ -429,7 +429,7 @@ run_cleanup() {
 # Основной цикл
 main() {
     echo "=== GensynFix Manager ==="
-    echo "Версия: 2.0 (с поддержкой NVM)"
+    echo "Версия: 2.0 (одна нода с NVM)"
     
     while true; do
         show_menu
@@ -437,7 +437,7 @@ main() {
         
         case "$CHOICE" in
             1) run_setup ;;
-            2) run_login_sequential ;;
+            2) run_login ;;
             3) run_start ;;
             4) run_cleanup ;;
             5) run_update ;;
