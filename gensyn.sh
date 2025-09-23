@@ -59,16 +59,12 @@ install_nodejs_global() {
     # Обновляем npm до последней версии
     npm install -g npm@latest || safe_exit "Не удалось обновить npm"
     
-    # Устанавливаем yarn глобально (с принудительной перезаписью если уже есть)
-    npm install -g yarn --force 2>/dev/null || true
-    
-    # Проверяем что yarn установлен
+    # Проверяем что yarn установлен, если нет - ставим
     if ! command -v yarn &> /dev/null; then
-        echo "[!] Yarn не найден, пробуем установить через apt..."
-        apt remove -y cmdtest 2>/dev/null || true
-        curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - || true
-        echo "deb https://dl.yarnpkg.com/debian/ stable main" > /etc/apt/sources.list.d/yarn.list || true
-        apt update && apt install -y yarn || true
+        echo "[+] Yarn не найден, устанавливаем..."
+        npm install -g yarn || safe_exit "Не удалось установить yarn"
+    else
+        echo "[+] Yarn уже установлен: $(yarn -v)"
     fi
     
     echo "[+] Node.js 20 успешно установлен глобально"
