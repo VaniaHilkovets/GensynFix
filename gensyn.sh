@@ -15,13 +15,12 @@ trap 'safe_exit "Произошла неожиданная ошибка на с�
 BASE_DIR="/root"
 REPO_URL="https://github.com/VaniaHilkovets/GensynFix.git"
 LOGIN_WAIT_TIMEOUT=10
-NVM_DIR="$HOME/.nvm"
 
 # Установка базовых пакетов
 install_base_packages() {
     echo "[+] Обновляем систему и устанавливаем базовые пакеты..."
     apt update || safe_exit "Не удалось обновить пакеты"
-    apt install -y curl sudo tmux lsof git htop nano rsync python3 python3-pip build-essential || safe_exit "Не удалось установить базовые пакеты"
+    apt install -y curl sudo tmux lsof git htop nano rsync python3 python3-pip build-essential gnupg || safe_exit "Не удалось установить базовые пакеты"
     
     # Создаем символическую ссылку для python если её нет
     if [ ! -e /usr/bin/python ]; then
@@ -34,45 +33,45 @@ install_base_packages() {
     fi
 }
 
-# Установка NVM и Node.js 20
-install_nvm_and_node() {
-    echo "[+] Устанавливаем NVM..."
+# Установка Node.js 20 глобально
+install_nodejs_global() {
+    echo "[+] Устанавливаем Node.js 20 глобально..."
     
-    # Удаляем старую версию NVM если есть
-    rm -rf "$NVM_DIR"
+    # Удаляем старые версии Node.js
+    apt remove -y nodejs npm 2>/dev/null || true
     
-    # Устанавливаем NVM
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash || safe_exit "Не удалось установить NVM"
+    # Добавляем официальный репозиторий NodeSource для Node.js 20
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - || safe_exit "Не удалось добавить репозиторий NodeSource"
     
-    # Загружаем NVM в текущую сессию
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-    
-    # Добавляем NVM в bashrc если его там нет
-    if ! grep -q "NVM_DIR" ~/.bashrc; then
-        echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc
-        echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.bashrc
-        echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> ~/.bashrc
-    fi
-    
-    # Проверяем что NVM установлен
-    if ! command -v nvm &> /dev/null; then
-        safe_exit "NVM не был установлен корректно"
-    fi
-    
-    echo "[+] Устанавливаем Node.js 20..."
-    nvm install 20 || safe_exit "Не удалось установить Node.js 20"
-    nvm use 20 || safe_exit "Не удалось переключиться на Node.js 20"
-    nvm alias default 20 || safe_exit "Не удалось установить Node.js 20 по умолчанию"
+    # Устанавливаем Node.js 20
+    apt install -y nodejs || safe_exit "Не удалось установить Node.js 20"
     
     # Проверяем установку
     NODE_VERSION=$(node -v)
+    NPM_VERSION=$(npm -v)
     echo "[+] Установлена версия Node.js: $NODE_VERSION"
+    echo "[+] Установлена версия npm: $NPM_VERSION"
     
     if [[ ! "$NODE_VERSION" =~ ^v20\. ]]; then
         safe_exit "Установлена неправильная версия Node.js: $NODE_VERSION"
     fi
+    
+    # Обновляем npm до последней версии
+    npm install -g npm@latest || safe_exit "Не удалось обновить npm"
+    
+    # Устанавливаем yarn глобально (с принудительной перезаписью если уже есть)
+    npm install -g yarn --force 2>/dev/null || true
+    
+    # Проверяем что yarn установлен
+    if ! command -v yarn &> /dev/null; then
+        echo "[!] Yarn не найден, пробуем установить через apt..."
+        apt remove -y cmdtest 2>/dev/null || true
+        curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - || true
+        echo "deb https://dl.yarnpkg.com/debian/ stable main" > /etc/apt/sources.list.d/yarn.list || true
+        apt update && apt install -y yarn || true
+    fi
+    
+    echo "[+] Node.js 20 успешно установлен глобально"
 }
 
 # Установка Python зависимостей
@@ -112,17 +111,6 @@ check_node_installed() {
     return 0
 }
 
-# Обеспечить загрузку NVM для всех операций
-ensure_nvm() {
-    export NVM_DIR="$HOME/.nvm"
-    if [ -s "$NVM_DIR/nvm.sh" ]; then
-        \. "$NVM_DIR/nvm.sh"
-        nvm use 20 &>/dev/null || true
-    else
-        safe_exit "NVM не найден. Переустановите ноды (опция 1)"
-    fi
-}
-
 # Проверить порт
 check_port() {
     local port=$1
@@ -138,7 +126,7 @@ run_setup() {
     echo "[+] Начинаем установку ноды..."
     
     install_base_packages
-    install_nvm_and_node
+    install_nodejs_global
     install_python_deps
     
     echo "[+] Клонируем GensynFix..."
@@ -166,8 +154,6 @@ run_setup() {
 
 # Логин ноды
 run_login() {
-    ensure_nvm
-    
     if ! check_node_installed; then
         return 1
     fi
@@ -187,8 +173,8 @@ run_login() {
     echo "[+] Запускаем tmux-сессию node на порту $PORT"
     tmux kill-session -t "node" 2>/dev/null || true
     
-    # Запускаем ноду
-    tmux new-session -d -s "node" -n run "cd $DIR && export NVM_DIR='$HOME/.nvm' && [ -s '$NVM_DIR/nvm.sh' ] && \. '$NVM_DIR/nvm.sh' && nvm use 20 && LOGIN_PORT=$PORT ./run_rl_swarm.sh"
+    # Запускаем ноду (Node.js теперь доступен глобально)
+    tmux new-session -d -s "node" -n run "cd $DIR && LOGIN_PORT=$PORT ./run_rl_swarm.sh"
     
     # Ждем запуска
     echo -n "[*] Ждем запуска ноды... "
@@ -260,8 +246,6 @@ run_login() {
 
 # Запуск ноды
 run_start() {
-    ensure_nvm
-    
     if ! check_node_installed; then
         return 1
     fi
@@ -277,8 +261,8 @@ run_start() {
     local SESSION="gensyn_node"
     tmux kill-session -t $SESSION 2>/dev/null || true
     
-    # Формируем команду с загрузкой NVM
-    local CMD="cd $DIR && export NVM_DIR='$HOME/.nvm' && [ -s '$NVM_DIR/nvm.sh' ] && \. '$NVM_DIR/nvm.sh' && nvm use 20 && LOGIN_PORT=$PORT ./auto_restart.sh"
+    # Запускаем команду (Node.js теперь доступен глобально)
+    local CMD="cd $DIR && LOGIN_PORT=$PORT ./auto_restart.sh"
     
     tmux new-session -d -s $SESSION -n "node" -x 120 -y 30 "$CMD"
     
@@ -294,8 +278,6 @@ run_start() {
 
 # Обновление
 run_update() {
-    ensure_nvm
-    
     if ! check_node_installed; then
         return 1
     fi
@@ -347,6 +329,12 @@ show_status() {
     fi
     
     echo -e "\n===== Статус ноды ====="
+    
+    # Показываем версии Node.js и npm
+    echo "Версии:"
+    echo "  Node.js: $(node -v 2>/dev/null || echo 'НЕ НАЙДЕН')"
+    echo "  npm: $(npm -v 2>/dev/null || echo 'НЕ НАЙДЕН')"
+    echo "  yarn: $(yarn -v 2>/dev/null || echo 'НЕ НАЙДЕН')"
     
     # Проверяем tmux сессии
     local SESSIONS=$(tmux list-sessions 2>/dev/null | grep -E "(node|gensyn_node)" | awk -F: '{print $1}' || true)
@@ -425,7 +413,7 @@ run_cleanup() {
 # Основной цикл
 main() {
     echo "=== GensynFix Manager ==="
-    echo "Версия: 2.0 (одна нода с NVM)"
+    echo "Версия: 3.0 (глобальный Node.js 20)"
     
     while true; do
         show_menu
