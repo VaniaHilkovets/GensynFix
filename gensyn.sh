@@ -35,9 +35,9 @@ ensure_node_version() {
     CURRENT_MAJOR=$(node -v | sed 's/^v\([0-9]\+\).*/\1/')
   fi
 
-  # Если node нет или версия не 20 — ставим Node.js 20 глобально
+  # Если node нет или версия не 20 — пытаемся ставим Node.js 20 глобально
   if [ "$CURRENT_MAJOR" -ne 20 ]; then
-    echo "[!] Устанавливаем Node.js 20 глобально..."
+    echo "[!] Пытаемся установить Node.js 20 глобально..."
     apt purge -y nodejs npm || true
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     apt install -y nodejs
@@ -46,8 +46,8 @@ ensure_node_version() {
   # Проверка результата
   INST_MAJOR=$(node -v | sed 's/^v\([0-9]\+\).*/\1/')
   if [ "$INST_MAJOR" -ne 20 ]; then
-    echo "[X] Не удалось установить Node.js 20. Текущая версия: $(node -v 2>/dev/null || echo 'нет')"
-    exit 1
+    echo "[!] Не удалось установить Node.js 20. Текущая версия: $(node -v 2>/dev/null || echo 'нет'). Продолжаем с текущей версией..."
+    # Убрали exit 1, чтобы скрипт продолжил работу
   fi
 
   # pip для Python-скриптов, если понадобится
