@@ -41,12 +41,16 @@ ensure_node_version() {
     apt purge -y nodejs npm || true
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     apt install -y nodejs
+
+    # Дополнительная проверка после установки
+    echo "Путь к node: $(which node)"
+    echo "Версия после установки: $(node -v 2>/dev/null || echo 'нет')"
   fi
 
   # Проверка результата
-  INST_MAJOR=$(node -v | sed 's/^v\([0-9]\+\).*/\1/')
+  INST_MAJOR=$(node -v | sed 's/^v\([0-9]\+\).*/\1/' 2>/dev/null || echo 0)
   if [ "$INST_MAJOR" -ne 20 ]; then
-    echo "[!] Не удалось установить Node.js 20. Текущая версия: $(node -v 2>/dev/null || echo 'нет'). Продолжаем с текущей версией..."
+    echo "[!] Не удалось установить Node.js 20. Текущая версия: $(node -v 2>/dev/null || echo 'нет'). Возможно, конфликт с nvm или другой установкой. Продолжаем с текущей версией..."
     # Убрали exit 1, чтобы скрипт продолжил работу
   fi
 
