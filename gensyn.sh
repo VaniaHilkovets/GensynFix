@@ -35,23 +35,19 @@ ensure_node_version() {
     CURRENT_MAJOR=$(node -v | sed 's/^v\([0-9]\+\).*/\1/')
   fi
 
-  # Если node нет или версия не 20 — пытаемся ставим Node.js 20 глобально
+  # Если node нет или версия не 20 — ставим Node.js 20 глобально
   if [ "$CURRENT_MAJOR" -ne 20 ]; then
-    echo "[!] Пытаемся установить Node.js 20 глобально..."
+    echo "[!] Устанавливаем Node.js 20 глобально..."
     apt purge -y nodejs npm || true
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     apt install -y nodejs
-
-    # Дополнительная проверка после установки
-    echo "Путь к node: $(which node)"
-    echo "Версия после установки: $(node -v 2>/dev/null || echo 'нет')"
   fi
 
   # Проверка результата
-  INST_MAJOR=$(node -v | sed 's/^v\([0-9]\+\).*/\1/' 2>/dev/null || echo 0)
+  INST_MAJOR=$(node -v | sed 's/^v\([0-9]\+\).*/\1/')
   if [ "$INST_MAJOR" -ne 20 ]; then
-    echo "[!] Не удалось установить Node.js 20. Текущая версия: $(node -v 2>/dev/null || echo 'нет'). Возможно, конфликт с nvm или другой установкой. Продолжаем с текущей версией..."
-    # Убрали exit 1, чтобы скрипт продолжил работу
+    echo "[X] Не удалось установить Node.js 20. Текущая версия: $(node -v 2>/dev/null || echo 'нет')"
+    exit 1
   fi
 
   # pip для Python-скриптов, если понадобится
@@ -79,7 +75,6 @@ ensure_node_version() {
 
 run_setup() {
   ensure_node_version
-  local COUNT
   read -p "Сколько экземпляров нод установить? " COUNT
   echo "[+] Клонируем GensynFix..."
   rm -rf "$BASE_DIR/GensynFix"
