@@ -168,8 +168,12 @@ run_login() {
     echo "[+] Запускаем tmux-сессию node на порту $PORT"
     tmux kill-session -t "node" 2>/dev/null || true
     
-    # Запускаем ноду (Node.js теперь доступен глобально)
-    tmux new-session -d -s "node" -n run "cd $DIR && LOGIN_PORT=$PORT ./run_rl_swarm.sh"
+    # Создаем временный файл для логов
+    local TEMP_LOG="/tmp/node_login_$.log"
+    rm -f "$TEMP_LOG"
+    
+    # Запускаем ноду с перенаправлением вывода в файл И в tmux
+    tmux new-session -d -s "node" -n run "cd $DIR && LOGIN_PORT=$PORT ./run_rl_swarm.sh 2>&1 | tee $TEMP_LOG"
     
     # Ждем запуска и появления строки о готовности к логину
     echo -n "[*] Ждем запуска ноды и готовности к логину... "
@@ -177,12 +181,22 @@ run_login() {
     local node_ready=false
     
     while [ $attempts -lt 60 ]; do
-        # Проверяем несколько возможных строк, которые означают готовность к логину
-        if tmux capture-pane -t "node" -p 2>/dev/null | grep -qE "(Failed to open http://localhost:3000|Please open http://localhost:3000|Please open it manually|Waiting for modal userData)"; then
-            echo "OK"
+        # Проверяем файл логов на наличие нужных строк
+        if [ -f "$TEMP_LOG" ]; then
+            if grep -qE "(Failed to open|Please open it manually|Waiting for modal|localhost:3000|Started server process)" "$TEMP_LOG"; then
+                echo "OK"
+                node_ready=true
+                break
+            fi
+        fi
+        
+        # Также проверяем порт - если он открылся, значит сервер запустился
+        if check_port $PORT; then
+            echo "OK (порт открыт)"
             node_ready=true
             break
         fi
+        
         sleep 2
         attempts=$((attempts + 1))
         # Показываем прогресс
@@ -194,8 +208,13 @@ run_login() {
     if [ "$node_ready" = false ]; then
         echo " TIMEOUT"
         echo "[!] Нода не запустилась или не готова к логину"
-        echo "[!] Последние строки из логов ноды:"
-        tmux capture-pane -t "node" -p | tail -20
+        echo "[!] Последние строки из логов:"
+        if [ -f "$TEMP_LOG" ]; then
+            tail -20 "$TEMP_LOG"
+        else
+            echo "Лог файл не найден"
+        fi
+        rm -f "$TEMP_LOG"
         return 1
     fi
     
@@ -238,6 +257,7 @@ run_login() {
         echo "[!] Не удалось получить ссылку для логина"
         echo "[!] Последние строки из tunnel логов:"
         [ -f "/tmp/tunnel.log" ] && tail -10 "/tmp/tunnel.log"
+        rm -f "$TEMP_LOG"
         return 1
     fi
     
@@ -266,9 +286,10 @@ run_login() {
     echo -e "\n⏳ Ждем $LOGIN_WAIT_TIMEOUT секунд для сохранения сессии..."
     sleep $LOGIN_WAIT_TIMEOUT
     
-    # Очищаем сессию логина
+    # Очищаем сессию логина и временный лог
     echo "[+] Останавливаем временную сессию ноды..."
     tmux kill-session -t "node" 2>/dev/null || true
+    rm -f "$TEMP_LOG"
     
     echo ""
     echo "✅ Логин завершен успешно!"
