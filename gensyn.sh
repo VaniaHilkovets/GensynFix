@@ -93,8 +93,7 @@ show_menu() {
     echo "3) Запуск ноды в tmux"
     echo "4) Удалить ноду"
     echo "5) Обновить GensynFix"
-    echo "6) Показать статус ноды"
-    echo "7) Выйти"
+    echo "6) Выйти"
 }
 
 # Проверить установлена ли нода
@@ -178,7 +177,8 @@ run_login() {
     local node_ready=false
     
     while [ $attempts -lt 60 ]; do
-        if tmux capture-pane -t "node" -p 2>/dev/null | grep -q "Please open http://localhost:3000 in your host browser"; then
+        # Проверяем несколько возможных строк, которые означают готовность к логину
+        if tmux capture-pane -t "node" -p 2>/dev/null | grep -qE "(Failed to open http://localhost:3000|Please open http://localhost:3000|Please open it manually|Waiting for modal userData)"; then
             echo "OK"
             node_ready=true
             break
@@ -361,68 +361,6 @@ run_update() {
     echo "✅ Обновление завершено успешно."
 }
 
-# Показать статус ноды
-show_status() {
-    if ! check_node_installed; then
-        return 1
-    fi
-    
-    echo -e "\n===== Статус ноды ====="
-    
-    # Показываем версии Node.js и npm
-    echo "Версии:"
-    echo "  Node.js: $(node -v 2>/dev/null || echo 'НЕ НАЙДЕН')"
-    echo "  npm: $(npm -v 2>/dev/null || echo 'НЕ НАЙДЕН')"
-    echo "  yarn: $(yarn -v 2>/dev/null || echo 'НЕ НАЙДЕН')"
-    echo "  Python: $(python --version 2>&1 | awk '{print $2}' || echo 'НЕ НАЙДЕН')"
-    echo "  jinja2: $(pip show jinja2 2>/dev/null | grep Version | awk '{print $2}' || echo 'НЕ НАЙДЕН')"
-    
-    # Проверяем tmux сессии
-    echo -e "\nTMUX сессии:"
-    local SESSIONS=$(tmux list-sessions 2>/dev/null | grep -E "(node|gensyn_node|tunnel)" | awk -F: '{print $1}' || true)
-    if [ -n "$SESSIONS" ]; then
-        echo "$SESSIONS" | while read session; do
-            local INFO=$(tmux list-sessions 2>/dev/null | grep "^$session:" | sed 's/^[^:]*: //')
-            echo "  ✓ $session: $INFO"
-        done
-    else
-        echo "  ✗ Нет активных tmux сессий"
-    fi
-    
-    echo -e "\nПорт и процесс:"
-    local PORT=3000
-    if check_port $PORT; then
-        local PID=$(lsof -ti:$PORT)
-        echo "  ✓ Нода (порт $PORT): АКТИВНА (PID: $PID)"
-    else
-        echo "  ✗ Нода (порт $PORT): НЕАКТИВНА"
-    fi
-    
-    echo -e "\nПапка ноды:"
-    local DIR="$BASE_DIR/GensynFix"
-    if [ -d "$DIR" ]; then
-        local SIZE=$(du -sh "$DIR" 2>/dev/null | cut -f1)
-        echo "  ✓ $DIR: существует ($SIZE)"
-        
-        # Дополнительная информация
-        if [ -f "$DIR/swarm.pem" ]; then
-            echo "  ✓ Ключ swarm.pem: найден"
-        else
-            echo "  ✗ Ключ swarm.pem: НЕ НАЙДЕН"
-        fi
-        
-        if [ -d "$DIR/logs" ]; then
-            local LOG_COUNT=$(ls -1 "$DIR/logs/" 2>/dev/null | wc -l)
-            local LOG_SIZE=$(du -sh "$DIR/logs" 2>/dev/null | cut -f1)
-            echo "  ✓ Логи: $LOG_COUNT файлов ($LOG_SIZE)"
-        else
-            echo "  ✗ Папка логов не найдена"
-        fi
-    else
-        echo "  ✗ $DIR: НЕ СУЩЕСТВУЕТ"
-    fi
-}
-
 # Удаление ноды
 run_cleanup() {
     echo "⚠️  Удалить ноду и все данные? (y/N):"
@@ -463,7 +401,7 @@ main() {
     
     while true; do
         show_menu
-        read -p "Выберите опцию [1-7]: " CHOICE
+        read -p "Выберите опцию [1-6]: " CHOICE
         
         case "$CHOICE" in
             1) run_setup ;;
@@ -471,9 +409,8 @@ main() {
             3) run_start ;;
             4) run_cleanup ;;
             5) run_update ;;
-            6) show_status ;;
-            7) echo "👋 До свидания!"; exit 0 ;;
-            *) echo "❌ Неверный выбор. Введите число от 1 до 7." ;;
+            6) echo "👋 До свидания!"; exit 0 ;;
+            *) echo "❌ Неверный выбор. Введите число от 1 до 6." ;;
         esac
         
         echo -e "\nНажмите Enter для возврата в меню..."
