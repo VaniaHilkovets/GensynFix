@@ -150,7 +150,7 @@ run_setup() {
     find "$BASE_DIR/GensynFix" -name "*.sh" -exec chmod +x {} \; || true
     
     # Настраиваем порт для ноды (используем порт 3000)
-    DIR="$BASE_DIR/GensynFix"
+    local DIR="$BASE_DIR/GensynFix"
     if [ -f "$DIR/run_rl_swarm.sh" ]; then
         # Добавляем переменную LOGIN_PORT в начало файла если её нет
         if ! grep -q "LOGIN_PORT=" "$DIR/run_rl_swarm.sh"; then
@@ -172,8 +172,8 @@ run_login() {
         return 1
     fi
     
-    DIR="$BASE_DIR/GensynFix"
-    PORT=3000
+    local DIR="$BASE_DIR/GensynFix"
+    local PORT=3000
     
     echo "[+] Начинаем логин ноды (порт $PORT)..."
     
@@ -211,7 +211,7 @@ run_login() {
     
     # Запускаем проброс порта
     echo "[+] Запускаем проброс порта $PORT"
-    TUNNEL_SESSION="tunnel"
+    local TUNNEL_SESSION="tunnel"
     tmux kill-session -t "$TUNNEL_SESSION" 2>/dev/null || true
     rm -f "/tmp/tunnel.log"
     
@@ -220,7 +220,7 @@ run_login() {
     # Ждем ссылку
     echo -n "[*] Ожидаем появления ссылки... "
     local link_attempts=0
-    LINK=""
+    local LINK=""
     while [ $link_attempts -lt 30 ]; do
         if [ -f "/tmp/tunnel.log" ]; then
             LINK=$(grep -o 'https://[^ ]*' "/tmp/tunnel.log" 2>/dev/null | grep '\.lhr\.life' | head -n1 || true)
@@ -268,17 +268,17 @@ run_start() {
     
     echo "[+] Запускаем ноду..."
     
-    DIR="$BASE_DIR/GensynFix"
-    PORT=3000
+    local DIR="$BASE_DIR/GensynFix"
+    local PORT=3000
     
     # Проверяем что все скрипты исполняемые
     find "$DIR" -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
     
-    SESSION="gensyn_node"
+    local SESSION="gensyn_node"
     tmux kill-session -t $SESSION 2>/dev/null || true
     
     # Формируем команду с загрузкой NVM
-    CMD="cd $DIR && export NVM_DIR='$HOME/.nvm' && [ -s '$NVM_DIR/nvm.sh' ] && \. '$NVM_DIR/nvm.sh' && nvm use 20 && LOGIN_PORT=$PORT ./auto_restart.sh"
+    local CMD="cd $DIR && export NVM_DIR='$HOME/.nvm' && [ -s '$NVM_DIR/nvm.sh' ] && \. '$NVM_DIR/nvm.sh' && nvm use 20 && LOGIN_PORT=$PORT ./auto_restart.sh"
     
     tmux new-session -d -s $SESSION -n "node" -x 120 -y 30 "$CMD"
     
@@ -302,7 +302,7 @@ run_update() {
     
     echo "[+] Обновляем GensynFix..."
     
-    DIR="$BASE_DIR/GensynFix"
+    local DIR="$BASE_DIR/GensynFix"
     
     # Обновляем папку
     if [ -d "$DIR/.git" ]; then
@@ -349,7 +349,7 @@ show_status() {
     echo -e "\n===== Статус ноды ====="
     
     # Проверяем tmux сессии
-    SESSIONS=$(tmux list-sessions 2>/dev/null | grep -E "(node|gensyn_node)" | awk -F: '{print $1}' || true)
+    local SESSIONS=$(tmux list-sessions 2>/dev/null | grep -E "(node|gensyn_node)" | awk -F: '{print $1}' || true)
     if [ -n "$SESSIONS" ]; then
         echo "Активные tmux сессии:"
         echo "$SESSIONS" | while read session; do
@@ -360,18 +360,18 @@ show_status() {
     fi
     
     echo -e "\nПорт и процесс:"
-    PORT=3000
+    local PORT=3000
     if check_port $PORT; then
-        PID=$(lsof -ti:$PORT)
+        local PID=$(lsof -ti:$PORT)
         echo "  Нода (порт $PORT): АКТИВНА (PID: $PID)"
     else
         echo "  Нода (порт $PORT): НЕАКТИВНА"
     fi
     
     echo -e "\nПапка ноды:"
-    DIR="$BASE_DIR/GensynFix"
+    local DIR="$BASE_DIR/GensynFix"
     if [ -d "$DIR" ]; then
-        SIZE=$(du -sh "$DIR" 2>/dev/null | cut -f1)
+        local SIZE=$(du -sh "$DIR" 2>/dev/null | cut -f1)
         echo "  $DIR: существует ($SIZE)"
         
         # Дополнительная информация
@@ -382,16 +382,12 @@ show_status() {
         fi
         
         if [ -d "$DIR/logs" ]; then
-            LOG_COUNT=$(ls -1 "$DIR/logs/" 2>/dev/null | wc -l)
+            local LOG_COUNT=$(ls -1 "$DIR/logs/" 2>/dev/null | wc -l)
             echo "  Логи: $LOG_COUNT файлов"
         fi
     else
         echo "  $DIR: НЕ СУЩЕСТВУЕТ"
     fi
-}
-            echo "  $DIR: НЕ СУЩЕСТВУЕТ"
-        fi
-    done
 }
 
 # Удаление ноды
