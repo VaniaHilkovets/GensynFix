@@ -102,10 +102,10 @@ run_auto() {
 
 show_menu() {
     clear
-    echo "=== CodeAssist v4.0 (Smart Wait) ==="
+    echo "=== CodeAssist ==="
     echo "1) Установить"
-    echo "2) АВТО-ЗАПУСК (Ждет полной загрузки!)"
-    echo "3) Логи"
+    echo "2) Запустить"
+    echo "3) Показать логи"
     echo "4) Выход"
 }
 
