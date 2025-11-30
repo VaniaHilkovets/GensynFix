@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# Gensyn CodeAssist Manager v5.1 (Stable CF + Token Fix)
+#        Gensyn CodeAssist Manager
 # ==========================================
 
 set -euo pipefail
