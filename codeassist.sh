@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# Gensyn CodeAssist Manager v5.4 (Fixed Terminal)
+# Gensyn CodeAssist Manager v5.7 (Anti-Staircase)
 # ==========================================
 
 set -u
@@ -13,8 +13,20 @@ PORT=3000
 TMUX_SESSION="codeassist_node"
 TUNNEL_SESSION="codeassist_tunnel"
 
-# Исправленная функция печати с принудительным возвратом каретки (\r)
-print_status() { echo -e "\r\n>>> $1"; }
+# === ОБРАБОТКА CTRL+C ===
+ctrl_c_handler() {
+    echo -e "\r\n\033[1;31m>>> ОБНАРУЖЕН CTRL+C. ЗАВЕРШЕНИЕ РАБОТЫ... <<<\033[0m\r"
+    tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
+    tmux kill-session -t "$TUNNEL_SESSION" 2>/dev/null || true
+    sudo pkill -9 -f cloudflared 2>/dev/null || true
+    stty sane
+    exit 1
+}
+trap ctrl_c_handler SIGINT
+
+# ГЛАВНЫЙ ФИКС: Добавляем \r (возврат в начало) перед текстом и в конце
+print_status() { echo -e "\r\n>>> $1\r"; }
+print_msg() { echo -e "\r$1\r"; }
 
 install_node() {
     print_status "Обновление системы и установка зависимостей..."
@@ -41,54 +53,45 @@ install_node() {
 }
 
 run_auto() {
-    echo ""
-    echo "🔑 Введите ваш Hugging Face Token (если нужно):"
-    # Скрытый ввод может ломать настройки терминала
-    read -s -p "Token: " HF_TOKEN
-    echo ""
-    
-    # === ВАЖНОЕ ИСПРАВЛЕНИЕ ===
-    # Сброс настроек терминала, чтобы убрать "лесенку"
     stty sane
-    # ==========================
-
-    # === АГРЕССИВНАЯ ЗАЧИСТКА ===
+    print_msg ""
+    print_msg "🔑 Введите ваш Hugging Face Token (если нужно):"
+    
+    # Читаем токен, затем принудительно переносим строку
+    read -p "Token: " HF_TOKEN
+    echo -e "\r" 
+    
     print_status "🧹 Зачистка портов и старых процессов..."
     
-    # 1. Убиваем сессии tmux
-    tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
-    tmux kill-session -t "$TUNNEL_SESSION" 2>/dev/null || true
-    
-    # 2. Убиваем ВСЕ процессы cloudflared (чтобы не было зомби-туннелей)
-    sudo pkill -9 -f cloudflared 2>/dev/null || true
+    # Полностью глушим вывод команд убийства, чтобы они не ломали верстку
+    tmux kill-session -t "$TMUX_SESSION" >/dev/null 2>&1 || true
+    tmux kill-session -t "$TUNNEL_SESSION" >/dev/null 2>&1 || true
+    sudo pkill -9 -f cloudflared >/dev/null 2>&1 || true
 
-    # 3. Проверяем, кто держит порт 3000 и убиваем его
     if lsof -i :$PORT -t >/dev/null 2>&1; then
         PID=$(lsof -i :$PORT -t)
-        echo "⚠️ Порт $PORT занят процессом PID $PID. Убиваем..."
-        sudo kill -9 $PID 2>/dev/null || true
+        print_msg "⚠️ Порт $PORT занят процессом PID $PID. Убиваем..."
+        sudo kill -9 $PID >/dev/null 2>&1 || true
     fi
     
-    # На всякий случай контрольный выстрел через fuser
-    sudo fuser -k -9 $PORT/tcp 2>/dev/null || true
+    sudo fuser -k -9 $PORT/tcp >/dev/null 2>&1 || true
     
     sleep 2
     print_status "✅ Порт свободен. Начинаем запуск."
 
-    # === ЗАПУСК ===
     CMD="cd $REPO_DIR && $HOME/.local/bin/uv run run.py; read"
     tmux new-session -d -s "$TMUX_SESSION" "$CMD"
 
-    print_status "Ждем инициализацию сервера..."
+    print_status "Ждем инициализацию сервера (Таймаут 100 мин, Ctrl+C для отмены)..."
     
     local started=false
     local token_sent=false
     local counter=0
     
-    while [ $counter -lt 300 ]; do
+    while [ $counter -lt 3000 ]; do
         sleep 2
         counter=$((counter+1))
-        LOGS=$(tmux capture-pane -pt "$TMUX_SESSION" -S -100)
+        LOGS=$(tmux capture-pane -pt "$TMUX_SESSION" -S -100 2>/dev/null)
         
         if [ "$token_sent" = false ] && echo "$LOGS" | grep -q "HuggingFace token"; then
              tmux send-keys -t "$TMUX_SESSION" "$HF_TOKEN" Enter
@@ -102,12 +105,12 @@ run_auto() {
             started=true
             break
         fi
-        echo -n "."
+        echo -ne "\r.   " # Печатаем точку и возвращаемся в начало, чтобы не спамить
     done
 
     if [ "$started" = false ]; then
-        echo ""
-        echo "❌ Сервер не запустился за 10 минут."
+        print_msg ""
+        print_msg "❌ Сервер не запустился за 100 минут."
         return
     fi
 
@@ -127,19 +130,19 @@ run_auto() {
         
         if [ -z "$link" ]; then
             sleep 2
-            echo -n "."
+            echo -ne "\rПоиск ссылки... "
             link_attempts=$((link_attempts+1))
         fi
     done
     
     if [ -z "$link" ]; then
-        echo ""
-        echo "⚠️ Ссылка не найдена. Проверьте логи туннеля (пункт 4)."
+        print_msg ""
+        print_msg "⚠️ Ссылка не найдена. Проверьте логи туннеля (пункт 4)."
     else
-        echo ""
-        echo "======================================="
-        echo "🚀 ВАША ССЫЛКА: $link"
-        echo "======================================="
+        print_msg ""
+        print_msg "======================================="
+        print_msg "🚀 ВАША ССЫЛКА: $link"
+        print_msg "======================================="
     fi
     
     read -p "Нажмите Enter..."
@@ -147,12 +150,12 @@ run_auto() {
 
 show_menu() {
     clear
-    echo "=== CodeAssist Manager v5.4 (Fixed Terminal) ==="
-    echo "1) Установить / Обновить"
-    echo "2) Запустить (Auto Kill Port)"
-    echo "3) Показать логи сервера"
-    echo "4) Показать логи туннеля"
-    echo "5) Выход"
+    print_msg "=== CodeAssist Manager v5.7 (Anti-Staircase) ==="
+    print_msg "1) Установить / Обновить"
+    print_msg "2) Запустить (Auto Kill Port)"
+    print_msg "3) Показать логи сервера"
+    print_msg "4) Показать логи туннеля"
+    print_msg "5) Выход"
 }
 
 while true; do
